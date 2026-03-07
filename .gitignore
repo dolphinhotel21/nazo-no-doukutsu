@@ -1,0 +1,32 @@
+# ===== 対象外プロジェクト（このリポジトリに含めない） =====
+chiiki_koken_points/
+flutter_application_1/
+solar_system_simulator/
+training_check_app/
+
+# ===== 個人情報・セッションデータ =====
+.claude/
+.vscode/
+
+# ===== 秘密情報 =====
+.env
+*.env
+*.key
+*.pem
+
+# ===== Flutter/Dart ビルド成果物 =====
+build/
+.dart_tool/
+.pub-cache/
+.pub/
+**/doc/api/
+
+# ===== IDE設定 =====
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# ===== OS =====
+.DS_Store
+Thumbs.db

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#00ff41">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="謎の洞窟">
+  <title>謎の洞窟</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- タイトル画面 -->
+  <div id="screen-title" class="screen active">
+    <div class="title-container">
+      <h1 class="game-title">謎の洞窟</h1>
+      <p class="title-sub">〜 伝説の秘宝を求めて 〜</p>
+      <div class="title-buttons">
+        <button class="btn" id="btn-new-game">はじめから</button>
+        <button class="btn" id="btn-load-title" disabled>ロードする</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- キャラクター作成画面 -->
+  <div id="screen-create" class="screen">
+    <div class="create-container">
+      <h2 class="section-title">キャラクター作成</h2>
+      <div class="create-row">
+        <label>名前：</label>
+        <input type="text" id="input-name" maxlength="10" placeholder="名前を入力...">
+      </div>
+      <h3 class="section-title">職業を選んでください</h3>
+      <div class="job-grid">
+        <div class="job-card" data-job="warrior">
+          <div class="job-name">⚔ 戦士</div>
+          <div class="job-stats">HP:高 MP:低 ATK:高 DEF:高</div>
+          <div class="job-desc">物理攻撃が得意。使える魔法は少ない。</div>
+        </div>
+        <div class="job-card" data-job="mage">
+          <div class="job-name">✦ 魔法使い</div>
+          <div class="job-stats">HP:低 MP:高 ATK:低 DEF:低</div>
+          <div class="job-desc">攻撃魔法が強力。物理攻撃は苦手。</div>
+        </div>
+        <div class="job-card" data-job="priest">
+          <div class="job-name">✚ 僧侶</div>
+          <div class="job-stats">HP:中 MP:中 ATK:低 DEF:中</div>
+          <div class="job-desc">回復・補助魔法の専門家。</div>
+        </div>
+        <div class="job-card" data-job="thief">
+          <div class="job-name">◆ 盗賊</div>
+          <div class="job-stats">HP:中 MP:低 ATK:中 DEF:中</div>
+          <div class="job-desc">逃走成功率が高い。罠を無効化する。</div>
+        </div>
+      </div>
+      <button class="btn" id="btn-start-game" disabled>冒険を開始する</button>
+    </div>
+  </div>
+
+  <!-- メインゲーム画面 -->
+  <div id="screen-game" class="screen">
+    <div id="title-bar">謎の洞窟</div>
+    <div id="game-main">
+      <!-- マップエリア -->
+      <div id="map-area">
+        <div id="map-container"></div>
+      </div>
+      <!-- ステータスパネル -->
+      <div id="status-panel">
+        <div class="status-block">
+          <div class="status-line" id="st-name">名前: ─</div>
+          <div class="status-line" id="st-job">職業: ─</div>
+          <div class="status-line" id="st-lv">LV: 1</div>
+          <div class="status-line" id="st-exp">EXP: 0/100</div>
+        </div>
+        <div class="status-divider"></div>
+        <div class="status-block">
+          <div class="status-line" id="st-hp">HP: 30/30</div>
+          <div class="status-line" id="st-mp">MP: 10/10</div>
+          <div class="status-line" id="st-atk">ATK: 10</div>
+          <div class="status-line" id="st-def">DEF: 5</div>
+        </div>
+        <div class="status-divider"></div>
+        <div class="status-block">
+          <div class="status-label">装備</div>
+          <div class="status-line" id="st-weapon">武器: ─</div>
+          <div class="status-line" id="st-armor">防具: ─</div>
+        </div>
+        <div class="status-divider"></div>
+        <div class="status-block">
+          <div class="status-line" id="st-gold">所持金: 100P</div>
+          <div class="status-line" id="st-location">場所: 町</div>
+        </div>
+        <div class="status-divider"></div>
+        <div class="status-block">
+          <div class="status-label">アイテム</div>
+          <div id="st-items" class="items-list"></div>
+        </div>
+        <div class="status-divider"></div>
+        <button class="btn btn-small" id="btn-menu">メニュー[ESC]</button>
+      </div>
+    </div>
+    <!-- メッセージログ -->
+    <div id="message-log">
+      <div class="msg-line" id="msg-0"></div>
+      <div class="msg-line" id="msg-1"></div>
+      <div class="msg-line" id="msg-2"></div>
+    </div>
+
+    <!-- 仮想十字キー（タッチ操作用） -->
+    <div id="dpad">
+      <div class="dpad-row">
+        <button class="dpad-btn" id="dpad-up" aria-label="上">▲</button>
+      </div>
+      <div class="dpad-row">
+        <button class="dpad-btn" id="dpad-left" aria-label="左">◀</button>
+        <div class="dpad-center"></div>
+        <button class="dpad-btn" id="dpad-right" aria-label="右">▶</button>
+      </div>
+      <div class="dpad-row">
+        <button class="dpad-btn" id="dpad-down" aria-label="下">▼</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- バトルオーバーレイ -->
+  <div id="battle-overlay" class="hidden">
+    <div id="battle-window">
+      <div id="battle-header"></div>
+      <div id="battle-enemy-area">
+        <div id="battle-enemy-sprite"></div>
+        <div id="battle-enemy-name"></div>
+        <div id="battle-enemy-hp-bar">
+          <span>HP: </span>
+          <div id="battle-hp-gauge"><div id="battle-hp-fill"></div></div>
+          <span id="battle-enemy-hp-num"></span>
+        </div>
+        <div id="battle-status-msg"></div>
+      </div>
+      <div id="battle-turn-msg"></div>
+      <div id="battle-commands">
+        <div id="battle-main-cmd" class="cmd-grid">
+          <button class="battle-btn" data-cmd="attack">たたかう</button>
+          <button class="battle-btn" data-cmd="magic">まほう</button>
+          <button class="battle-btn" data-cmd="item">アイテム</button>
+          <button class="battle-btn" data-cmd="defend">ぼうぎょ</button>
+          <button class="battle-btn" data-cmd="run">にげる</button>
+        </div>
+        <div id="battle-sub-cmd" class="hidden">
+          <div id="sub-cmd-title"></div>
+          <div id="sub-cmd-list"></div>
+          <button class="battle-btn" id="btn-sub-back">← もどる</button>
+        </div>
+      </div>
+      <div id="battle-log"></div>
+    </div>
+  </div>
+
+  <!-- ショップオーバーレイ -->
+  <div id="shop-overlay" class="hidden">
+    <div id="shop-window">
+      <div id="shop-title"></div>
+      <div id="shop-content"></div>
+      <button class="btn" id="btn-shop-close">とじる</button>
+    </div>
+  </div>
+
+  <!-- メニューオーバーレイ -->
+  <div id="menu-overlay" class="hidden">
+    <div id="menu-window">
+      <div class="menu-title">メニュー</div>
+      <button class="btn" id="btn-save">セーブ</button>
+      <button class="btn" id="btn-save-exit">セーブして終了</button>
+      <button class="btn" id="btn-menu-close">とじる</button>
+    </div>
+  </div>
+
+  <!-- セーブ/ロードスロット選択オーバーレイ -->
+  <div id="slot-overlay" class="hidden">
+    <div id="slot-window">
+      <div id="slot-title"></div>
+      <div id="slot-list"></div>
+      <button class="btn" id="btn-slot-close">とじる</button>
+    </div>
+  </div>
+
+  <!-- ゲームオーバー画面 -->
+  <div id="screen-gameover" class="screen">
+    <div class="gameover-container">
+      <h1 class="gameover-title">GAME OVER</h1>
+      <p id="gameover-msg">あなたは力尽きた...</p>
+      <button class="btn" id="btn-go-load">ロードする</button>
+      <button class="btn" id="btn-go-title">タイトルへ</button>
+    </div>
+  </div>
+
+  <!-- エンディング画面 -->
+  <div id="screen-ending" class="screen">
+    <div class="ending-container">
+      <h1 class="ending-title">✦ 冒険完了 ✦</h1>
+      <p id="ending-msg"></p>
+      <button class="btn" id="btn-ending-title">タイトルへ戻る</button>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+  <script>
+    // Service Worker 登録
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./service-worker.js')
+          .catch(err => console.warn('SW registration failed:', err));
+      });
+    }
+  </script>
+</body>
+</html>

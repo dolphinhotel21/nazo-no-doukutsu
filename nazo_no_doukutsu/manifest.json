@@ -1,0 +1,19 @@
+{
+  "name": "謎の洞窟",
+  "short_name": "謎の洞窟",
+  "description": "伝説の秘宝を求めて謎の洞窟を探索するRPG",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#00ff41",
+  "start_url": "./",
+  "scope": "./",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

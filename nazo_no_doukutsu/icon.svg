@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 背景 -->
+  <rect width="512" height="512" fill="#000000"/>
+
+  <!-- 岩盤ベース -->
+  <rect x="0" y="340" width="512" height="172" fill="#1a1a1a"/>
+
+  <!-- 洞窟入口アーチ -->
+  <path d="M 136 340 Q 136 140 256 100 Q 376 140 376 340 Z" fill="#000000"/>
+  <path d="M 136 340 Q 136 140 256 100 Q 376 140 376 340 Z"
+        fill="none" stroke="#00ff41" stroke-width="10"/>
+
+  <!-- 岩の左右の壁 -->
+  <rect x="40" y="280" width="96" height="232" rx="6" fill="#2a2a2a"/>
+  <rect x="376" y="280" width="96" height="232" rx="6" fill="#2a2a2a"/>
+
+  <!-- 岩の質感ライン -->
+  <line x1="70" y1="310" x2="90" y2="370" stroke="#333" stroke-width="3"/>
+  <line x1="400" y1="300" x2="420" y2="360" stroke="#333" stroke-width="3"/>
+
+  <!-- 鍾乳石（上から垂れる） -->
+  <polygon points="196,130 210,178 182,178" fill="#2a2a2a"/>
+  <polygon points="238,110 253,162 223,162" fill="#2a2a2a"/>
+  <polygon points="278,112 293,165 263,165" fill="#2a2a2a"/>
+  <polygon points="316,132 330,180 302,180" fill="#2a2a2a"/>
+
+  <!-- 洞窟内の緑の輝き -->
+  <ellipse cx="256" cy="340" rx="100" ry="22" fill="#00ff41" opacity="0.12"/>
+  <ellipse cx="256" cy="330" rx="60" ry="12" fill="#00ff41" opacity="0.10"/>
+
+  <!-- 内部の光の粒 -->
+  <circle cx="220" cy="270" r="4" fill="#00ff41" opacity="0.55"/>
+  <circle cx="265" cy="245" r="3" fill="#00ff41" opacity="0.40"/>
+  <circle cx="300" cy="265" r="4" fill="#00ff41" opacity="0.50"/>
+  <circle cx="248" cy="300" r="5" fill="#00ff41" opacity="0.35"/>
+  <circle cx="278" cy="310" r="3" fill="#00ff41" opacity="0.45"/>
+
+  <!-- フレームの四隅装飾 -->
+  <rect x="8" y="8" width="32" height="4" fill="#00ff41" opacity="0.6"/>
+  <rect x="8" y="8" width="4" height="32" fill="#00ff41" opacity="0.6"/>
+  <rect x="472" y="8" width="32" height="4" fill="#00ff41" opacity="0.6"/>
+  <rect x="500" y="8" width="4" height="32" fill="#00ff41" opacity="0.6"/>
+  <rect x="8" y="500" width="32" height="4" fill="#00ff41" opacity="0.6"/>
+  <rect x="8" y="472" width="4" height="32" fill="#00ff41" opacity="0.6"/>
+  <rect x="472" y="500" width="32" height="4" fill="#00ff41" opacity="0.6"/>
+  <rect x="500" y="472" width="4" height="32" fill="#00ff41" opacity="0.6"/>
+</svg>

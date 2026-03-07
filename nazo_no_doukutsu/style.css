@@ -1,0 +1,990 @@
+/* =============================
+   リセット & 基本スタイル
+   ============================= */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #000;
+  color: #00ff41;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 14px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  user-select: none;
+}
+
+/* =============================
+   画面切り替え
+   ============================= */
+.screen {
+  display: none;
+  width: 800px;
+  min-height: 600px;
+  border: 2px solid #00ff41;
+  background: #0a0a0a;
+  position: relative;
+}
+
+.screen.active {
+  display: flex;
+  flex-direction: column;
+}
+
+/* =============================
+   タイトル画面
+   ============================= */
+.title-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 40px;
+}
+
+.game-title {
+  font-size: 52px;
+  color: #00ff41;
+  text-shadow: 0 0 20px #00ff41, 0 0 40px #00ff41;
+  letter-spacing: 8px;
+}
+
+.title-sub {
+  color: #888;
+  font-size: 16px;
+  letter-spacing: 4px;
+}
+
+.title-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+  width: 200px;
+}
+
+/* =============================
+   ボタン共通
+   ============================= */
+.btn {
+  background: #0a0a0a;
+  color: #00ff41;
+  border: 1px solid #00ff41;
+  padding: 10px 20px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 14px;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.1s, color 0.1s;
+  width: 100%;
+}
+
+.btn:hover:not(:disabled) {
+  background: #00ff41;
+  color: #000;
+}
+
+.btn:disabled {
+  color: #444;
+  border-color: #444;
+  cursor: not-allowed;
+}
+
+.btn-small {
+  padding: 5px 10px;
+  font-size: 12px;
+  width: 100%;
+}
+
+/* =============================
+   キャラクター作成画面
+   ============================= */
+.create-container {
+  flex: 1;
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section-title {
+  color: #00ff41;
+  font-size: 16px;
+  border-bottom: 1px solid #333;
+  padding-bottom: 6px;
+}
+
+.create-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.create-row input {
+  background: #111;
+  color: #00ff41;
+  border: 1px solid #00ff41;
+  padding: 6px 10px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 14px;
+  width: 200px;
+  outline: none;
+}
+
+.job-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.job-card {
+  border: 1px solid #333;
+  padding: 12px;
+  cursor: pointer;
+  transition: border-color 0.1s, background 0.1s;
+}
+
+.job-card:hover {
+  border-color: #00ff41;
+  background: #111;
+}
+
+.job-card.selected {
+  border-color: #00ff41;
+  background: #0d2010;
+}
+
+.job-name {
+  font-size: 16px;
+  color: #00ff41;
+  margin-bottom: 4px;
+}
+
+.job-stats {
+  font-size: 11px;
+  color: #0af;
+  margin-bottom: 4px;
+}
+
+.job-desc {
+  font-size: 12px;
+  color: #888;
+}
+
+/* =============================
+   メインゲーム画面
+   ============================= */
+#screen-game {
+  display: none;
+}
+
+#screen-game.active {
+  display: flex;
+  flex-direction: column;
+}
+
+#title-bar {
+  background: #0d1a0d;
+  border-bottom: 1px solid #00ff41;
+  padding: 6px 16px;
+  font-size: 16px;
+  color: #00ff41;
+  letter-spacing: 4px;
+  text-align: center;
+}
+
+#game-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* マップエリア */
+#map-area {
+  flex: 1;
+  background: #050505;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid #1a1a1a;
+}
+
+#map-container {
+  display: grid;
+  gap: 0;
+}
+
+/* マップタイル */
+.tile {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: bold;
+  position: relative;
+  overflow: hidden;
+}
+
+.tile-wall {
+  background: #1a1a1a;
+  color: #333;
+}
+
+.tile-floor {
+  background: #0a0f0a;
+  color: #333;
+}
+
+.tile-player {
+  background: #0a0f0a;
+  color: #00ff41;
+}
+
+.tile-stair-down {
+  background: #0a0f0a;
+  color: #ffff00;
+}
+
+.tile-stair-up {
+  background: #0a0f0a;
+  color: #ffff00;
+}
+
+.tile-building {
+  background: #0a0f0a;
+  color: #00ffff;
+}
+
+.tile-boss {
+  background: #0a0f0a;
+  color: #ff3333;
+}
+
+.tile-treasure {
+  background: #0a0f0a;
+  color: #ffd700;
+}
+
+/* 霧エフェクト */
+.fog-hidden {
+  background: #000 !important;
+  color: #000 !important;
+}
+
+.fog-explored {
+  opacity: 0.35;
+}
+
+.fog-visible {
+  opacity: 1;
+}
+
+/* ステータスパネル */
+#status-panel {
+  width: 180px;
+  background: #050505;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+.status-block {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.status-line {
+  font-size: 12px;
+  color: #00cc33;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-label {
+  font-size: 11px;
+  color: #0af;
+}
+
+.status-divider {
+  height: 1px;
+  background: #1a3a1a;
+}
+
+.items-list {
+  font-size: 11px;
+  color: #aaa;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* メッセージログ */
+#message-log {
+  border-top: 1px solid #1a3a1a;
+  background: #050505;
+  padding: 6px 12px;
+  height: 70px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.msg-line {
+  font-size: 13px;
+  color: #00cc33;
+  min-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* =============================
+   バトルオーバーレイ
+   ============================= */
+#battle-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+#battle-overlay.hidden {
+  display: none;
+}
+
+#battle-window {
+  width: 480px;
+  border: 2px solid #00ff41;
+  background: #050505;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 0 30px rgba(0, 255, 65, 0.3);
+}
+
+#battle-header {
+  text-align: center;
+  color: #ff3333;
+  font-size: 16px;
+  border-bottom: 1px solid #333;
+  padding-bottom: 8px;
+}
+
+#battle-enemy-area {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#battle-enemy-name {
+  font-size: 18px;
+  color: #ff6666;
+}
+
+#battle-enemy-hp-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+#battle-hp-gauge {
+  flex: 1;
+  height: 12px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  overflow: hidden;
+}
+
+#battle-hp-fill {
+  height: 100%;
+  background: #00cc33;
+  transition: width 0.3s;
+}
+
+#battle-enemy-hp-num {
+  min-width: 40px;
+  text-align: right;
+}
+
+#battle-status-msg {
+  font-size: 12px;
+  color: #ff9900;
+  min-height: 16px;
+}
+
+#battle-turn-msg {
+  text-align: center;
+  color: #aaa;
+  font-size: 13px;
+  min-height: 16px;
+}
+
+/* バトルコマンド */
+.cmd-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.battle-btn {
+  background: #0a0a0a;
+  color: #00ff41;
+  border: 1px solid #00ff41;
+  padding: 8px 12px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  text-align: left;
+}
+
+.battle-btn:hover:not(:disabled) {
+  background: #00ff41;
+  color: #000;
+}
+
+.battle-btn:disabled {
+  color: #333;
+  border-color: #333;
+  cursor: not-allowed;
+}
+
+#battle-sub-cmd {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#battle-sub-cmd.hidden {
+  display: none;
+}
+
+#sub-cmd-title {
+  color: #0af;
+  font-size: 13px;
+  border-bottom: 1px solid #333;
+  padding-bottom: 4px;
+}
+
+#sub-cmd-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+#battle-log {
+  border-top: 1px solid #1a3a1a;
+  padding-top: 8px;
+  font-size: 13px;
+  color: #ccc;
+  min-height: 40px;
+  max-height: 60px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* =============================
+   ショップオーバーレイ
+   ============================= */
+#shop-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+#shop-overlay.hidden {
+  display: none;
+}
+
+#shop-window {
+  width: 500px;
+  max-height: 520px;
+  border: 2px solid #00ffff;
+  background: #050505;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 0 30px rgba(0, 255, 255, 0.2);
+  overflow-y: auto;
+}
+
+#shop-title {
+  text-align: center;
+  color: #00ffff;
+  font-size: 18px;
+  border-bottom: 1px solid #006666;
+  padding-bottom: 8px;
+}
+
+#shop-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shop-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid #1a3a3a;
+  font-size: 13px;
+}
+
+.shop-item-row:hover {
+  background: #0a1a1a;
+}
+
+.shop-item-row.disabled {
+  color: #444;
+  border-color: #222;
+}
+
+.shop-item-name { color: #ccc; }
+.shop-item-price { color: #ffd700; }
+.shop-item-desc { color: #666; font-size: 11px; }
+
+.shop-btn {
+  background: #0a1a1a;
+  color: #00ffff;
+  border: 1px solid #00ffff;
+  padding: 4px 10px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.shop-btn:hover {
+  background: #00ffff;
+  color: #000;
+}
+
+.shop-btn:disabled {
+  color: #333;
+  border-color: #333;
+  cursor: not-allowed;
+}
+
+.shop-gold-info {
+  color: #ffd700;
+  font-size: 13px;
+  text-align: right;
+}
+
+.shop-section-title {
+  color: #0af;
+  font-size: 14px;
+  margin-top: 8px;
+  border-bottom: 1px solid #1a3a3a;
+  padding-bottom: 4px;
+}
+
+/* =============================
+   メニューオーバーレイ
+   ============================= */
+#menu-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+#menu-overlay.hidden {
+  display: none;
+}
+
+#menu-window {
+  width: 240px;
+  border: 2px solid #00ff41;
+  background: #050505;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
+}
+
+.menu-title {
+  font-size: 18px;
+  color: #00ff41;
+  border-bottom: 1px solid #333;
+  padding-bottom: 8px;
+  width: 100%;
+  text-align: center;
+}
+
+/* =============================
+   ゲームオーバー画面
+   ============================= */
+.gameover-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 40px;
+}
+
+.gameover-title {
+  font-size: 48px;
+  color: #ff3333;
+  text-shadow: 0 0 20px #ff3333;
+  letter-spacing: 8px;
+}
+
+#gameover-msg {
+  color: #888;
+  font-size: 16px;
+}
+
+/* =============================
+   エンディング画面
+   ============================= */
+.ending-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 40px;
+  text-align: center;
+}
+
+.ending-title {
+  font-size: 36px;
+  color: #ffd700;
+  text-shadow: 0 0 20px #ffd700;
+  letter-spacing: 6px;
+}
+
+#ending-msg {
+  color: #ccc;
+  font-size: 16px;
+  line-height: 1.8;
+  max-width: 500px;
+}
+
+/* =============================
+   フラッシュエフェクト
+   ============================= */
+@keyframes flash-red {
+  0%   { background: rgba(255, 0, 0, 0.4); }
+  100% { background: transparent; }
+}
+
+@keyframes flash-green {
+  0%   { background: rgba(0, 255, 65, 0.3); }
+  100% { background: transparent; }
+}
+
+.flash-damage {
+  animation: flash-red 0.3s ease-out;
+}
+
+.flash-heal {
+  animation: flash-green 0.3s ease-out;
+}
+
+#map-area.flash-damage {
+  animation: flash-red 0.3s ease-out;
+}
+
+/* =============================
+   スクロールバー
+   ============================= */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1a3a1a;
+}
+
+/* =============================
+   プレイヤースプライト（CSSピクセルアート）
+   ============================= */
+.player-sprite {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  top: 4px;
+  left: 6px;
+  background: transparent;
+  pointer-events: none;
+}
+
+/* =============================
+   敵スプライト（SVG）
+   ============================= */
+#battle-enemy-sprite {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 72px;
+}
+
+#battle-enemy-sprite svg {
+  image-rendering: pixelated;
+}
+
+/* =============================
+   セーブ/ロードスロット選択
+   ============================= */
+#slot-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 110;
+}
+
+#slot-overlay.hidden { display: none; }
+
+#slot-window {
+  width: 460px;
+  max-height: 500px;
+  border: 2px solid #00ff41;
+  background: #050505;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  box-shadow: 0 0 30px rgba(0, 255, 65, 0.25);
+}
+
+#slot-title {
+  text-align: center;
+  color: #00ff41;
+  font-size: 17px;
+  border-bottom: 1px solid #1a3a1a;
+  padding-bottom: 8px;
+}
+
+.slot-card {
+  border: 1px solid #1a3a1a;
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.slot-card.slot-empty {
+  border-color: #111;
+  opacity: 0.45;
+}
+
+.slot-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.slot-char {
+  color: #00ff41;
+  font-size: 13px;
+}
+
+.slot-location {
+  color: #0af;
+  font-size: 12px;
+}
+
+.slot-date {
+  color: #555;
+  font-size: 11px;
+}
+
+.slot-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.slot-btn {
+  background: #0a1a0a;
+  color: #00ff41;
+  border: 1px solid #00ff41;
+  padding: 4px 10px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.slot-btn:hover {
+  background: #00ff41;
+  color: #000;
+}
+
+.slot-btn-danger {
+  color: #ff4444;
+  border-color: #ff4444;
+  background: #1a0505;
+}
+
+.slot-btn-danger:hover {
+  background: #ff4444;
+  color: #000;
+}
+
+/* =============================
+   カーソル選択ハイライト
+   ============================= */
+.cursor-selected {
+  background: #00ff41 !important;
+  color: #000 !important;
+  outline: 2px solid #00ff41;
+}
+
+/* =============================
+   仮想Dパッド（タッチ操作用）
+   ============================= */
+#dpad {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 0 14px;
+  background: #050505;
+  border-top: 1px solid #1a3a1a;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* タッチデバイスのみ表示 */
+@media (hover: none) and (pointer: coarse) {
+  #dpad {
+    display: flex;
+  }
+}
+
+.dpad-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.dpad-btn {
+  width: 56px;
+  height: 56px;
+  background: #0d1a0d;
+  color: #00ff41;
+  border: 1px solid #00ff41;
+  font-size: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Courier New', Courier, monospace;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+  box-shadow: 0 0 6px rgba(0, 255, 65, 0.15);
+  border-radius: 4px;
+}
+
+.dpad-btn:active {
+  background: #00ff41;
+  color: #000;
+  box-shadow: 0 0 12px rgba(0, 255, 65, 0.5);
+}
+
+.dpad-center {
+  width: 56px;
+  height: 56px;
+  background: #080808;
+  border: 1px solid #111;
+  border-radius: 4px;
+}
+
+/* =============================
+   モバイル対応
+   ============================= */
+@media screen and (max-width: 820px) {
+  body {
+    align-items: flex-start;
+    overflow-x: hidden;
+  }
+
+  .screen {
+    width: 100vw;
+    min-height: 100dvh;
+    border-left: none;
+    border-right: none;
+  }
+
+  #game-main {
+    flex: 1;
+    min-height: 0;
+  }
+
+  #status-panel {
+    width: 130px;
+    font-size: 11px;
+    padding: 6px;
+  }
+
+  .status-line {
+    font-size: 10px;
+  }
+
+  .game-title {
+    font-size: 36px;
+  }
+}
