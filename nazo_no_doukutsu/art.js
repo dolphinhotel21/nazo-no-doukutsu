@@ -725,10 +725,23 @@ const Art = (() => {
     thief:   { hair: '#8a4a2a', head: { h: '#3aa87a', H: '#8a4a2a' }, headPx: [[4, 2, 'h'], [3, 2, 'h']], T: '#3aa87a', t: '#1a5a4a' },
   };
 
-  function heroGrid(job, weapon, armor, female) {
+  // 下地の服（鎧やローブを着ても、腰から下に見える）
+  const CLOTHES_LOOK = {
+    cloth:       { T: null, t: null, L: '#4a3a2a' },
+    traveler:    { T: '#6a7a3a', t: '#3a4a1a', L: '#5a4a30' },
+    dougi:       { T: '#f0f0f0', t: '#202020', L: '#f0f0f0', pants: true },
+    onepiece:    { T: '#7ab8e8', t: '#ffffff', skirt: true },
+    frill_dress: { T: '#ff8ab8', t: '#ffffff', skirt: true, frill: true },
+    apron_dress: { T: '#2a2a4a', t: '#ffffff', skirt: true, frill: true, apron: true },
+  };
+
+  // look = { job, weapon, clothes, armor, accessory, female }
+  function heroGrid(look) {
+    const { job, weapon, clothes, armor, accessory, female } = look;
     const g = HERO_BASE.map(r => r.split(''));
     const pal = { s: '#e8a878', e: '#101010', b: '#3a2a1a' };
     const put = (x, y, c) => { if (g[y] && x >= 0 && x < 16) g[y][x] = c; };
+    const putEmpty = (x, y, c) => { if (g[y] && g[y][x] === '.') g[y][x] = c; };
     const fm = female ? (FEMALE[job] || FEMALE.warrior) : null;
 
     const head = fm ? { pal: fm.head, px: fm.headPx } : (HEADS[job] || HEADS.warrior);
@@ -742,36 +755,63 @@ const Art = (() => {
       put(9, 4, 'q');
     }
 
+    // 1) 下地の服
     const body = fm ? { T: fm.T, t: fm.t } : (JOB_BODY[job] || JOB_BODY.warrior);
-    const a = ARMOR_LOOK[armor] || ARMOR_LOOK.cloth;
-    pal.T = a.T || body.T;
-    pal.t = a.t || body.t;
-    pal.L = a.L;
-    if (a.pads) { pal.p = a.pads; put(4, 6, 'p'); put(11, 6, 'p'); put(4, 7, 'p'); put(11, 7, 'p'); }
-    if (a.robe) {
-      for (let y = 11; y <= 13; y++) for (let x = 5; x <= 10; x++) put(x, y, 'T');
-      put(4, 13, 'T'); put(11, 13, 'T');
-      for (let y = 6; y <= 13; y++) put(7, y, 't');
+    const c = CLOTHES_LOOK[clothes] || CLOTHES_LOOK.cloth;
+    pal.T = c.T || body.T;
+    pal.t = c.t || body.t;
+    pal.L = c.L || '#4a3a2a';
+    pal.U = pal.T;                  // 腰から下（スカート）の色は服の色
+    pal.u = pal.t;
+    const skirt = c.skirt || (fm && !c.pants);
+    const frill = c.frill || (fm && !c.T);
+
+    // 2) 鎧・ローブ（上半身を覆う。ローブは足元まで）
+    const a = armor ? ARMOR_LOOK[armor] : null;
+    if (a) {
+      pal.T = a.T || pal.T;
+      pal.t = a.t || pal.t;
+      if (a.pads) { pal.p = a.pads; put(4, 6, 'p'); put(11, 6, 'p'); put(4, 7, 'p'); put(11, 7, 'p'); }
+      if (a.mask && !fm) { put(6, 5, 't'); put(7, 5, 't'); put(8, 5, 't'); put(9, 5, 't'); }
+      if (a.shine) { pal.Z = '#ffffff'; put(6, 7, 'Z'); }
     }
-    if (a.mask && !fm) { put(6, 5, 't'); put(7, 5, 't'); put(8, 5, 't'); put(9, 5, 't'); }
-    if (a.shine) { pal.Z = '#ffffff'; put(6, 7, 'Z'); }
-    if (fm) {
-      // ふんわりしたスカートと胸元のリボン、すそのフリル
-      pal.F = '#ffffff'; pal.R = '#ff5a9a';
+    if (a && a.robe) {
+      pal.U = a.T; pal.u = a.t;
+      for (let y = 11; y <= 13; y++) for (let x = 5; x <= 10; x++) put(x, y, 'U');
+      put(4, 13, 'U'); put(11, 13, 'U');
+      for (let y = 6; y <= 13; y++) put(7, y, y >= 11 ? 'u' : 't');
+    } else if (skirt) {
+      // ふんわりしたスカート（すそにフリル）
+      pal.F = '#ffffff';
       for (let x = 5; x <= 10; x++) put(x, 10, 't');
-      for (let x = 4; x <= 11; x++) { put(x, 11, 'T'); put(x, 12, 'T'); }
-      for (let x = 3; x <= 12; x++) put(x, 13, x % 2 ? 'F' : 'T');
-      for (let x = 0; x < 16; x++) { if (g[14][x] !== '.') g[14][x] = '.'; if (g[15][x] !== '.') g[15][x] = '.'; }
+      for (let x = 4; x <= 11; x++) { put(x, 11, 'U'); put(x, 12, 'U'); }
+      for (let x = 3; x <= 12; x++) put(x, 13, frill && x % 2 ? 'F' : 'U');
+      for (let x = 0; x < 16; x++) { g[14][x] = '.'; g[15][x] = '.'; }
       put(6, 14, 's'); put(9, 14, 's'); put(6, 15, 'b'); put(9, 15, 'b'); put(5, 15, 'b'); put(10, 15, 'b');
-      put(7, 6, 'R'); put(8, 6, 'R'); put(7, 7, 'R');
     }
+    if (c.apron && !(a && a.robe)) {
+      pal.A = '#ffffff';
+      for (let y = 11; y <= 12; y++) for (let x = 6; x <= 9; x++) put(x, y, 'A');
+      if (!a) { put(6, 8, 'A'); put(9, 8, 'A'); put(7, 9, 'A'); put(8, 9, 'A'); }
+    }
+    if (fm && !a) { pal.R = '#ff5a9a'; put(7, 6, 'R'); put(8, 6, 'R'); put(7, 7, 'R'); }
+
+    // 3) アクセサリー（見た目に出るもの）
+    if (accessory === 'red_cape') {
+      pal.C = '#c0201a'; pal.c = '#801010';
+      for (let y = 6; y <= 13; y++) { putEmpty(4, y, y > 9 ? 'c' : 'C'); putEmpty(3, y, y > 7 ? 'c' : null); }
+      for (let y = 8; y <= 14; y++) putEmpty(3, y, 'c');
+    }
+    if (accessory === 'ribbon') { pal.Q = '#ff5aa0'; put(4, 1, 'Q'); put(5, 0, 'Q'); put(5, 1, 'Q'); put(4, 0, 'Q'); }
+    if (accessory === 'magic_pendant') { pal.Y = '#ffd800'; pal.y = '#40c0ff'; put(7, 7, 'y'); put(8, 7, 'Y'); }
+    if (accessory === 'wind_boots') pal.b = '#2aa86a';
 
     const w = WEAPON_LOOK[weapon];
     if (w) {
       // 武器の色記号が体の色と重ならないよう、別名に置き換える
       const map = {};
       for (const [k, v] of Object.entries(w.pal)) { const nk = 'w_' + k; map[k] = nk; pal[nk] = v; }
-      w.px.forEach(([x, y, c]) => put(x, y, map[c]));
+      w.px.forEach(([x, y, ch]) => put(x, y, map[ch]));
     }
     return { rows: g, pal };
   }
@@ -787,18 +827,19 @@ const Art = (() => {
     return `<svg xmlns="http://www.w3.org/2000/svg"${size} viewBox="0 0 ${rows[0].length} ${rows.length}" shape-rendering="crispEdges">${rects}</svg>`;
   }
 
+  const lookKey = lk => `hero-${lk.job}-${lk.weapon}-${lk.clothes}-${lk.armor}-${lk.accessory}-${lk.female ? 'f' : 'm'}`;
   // マップ用：装備を反映した16×16の姿（背景画像として使う）
-  function heroURL(job, weapon, armor, female) {
-    const key = `hero-${job}-${weapon}-${armor}-${female ? 'f' : 'm'}`;
+  function heroURL(look) {
+    const key = lookKey(look);
     if (!cache[key]) {
-      const { rows, pal } = heroGrid(job, weapon, armor, female);
+      const { rows, pal } = heroGrid(look);
       cache[key] = `url("data:image/svg+xml,${encodeURIComponent(gridSVG(rows, pal))}")`;
     }
     return cache[key];
   }
 
-  function heroInline(job, weapon, armor, px, female) {
-    const { rows, pal } = heroGrid(job, weapon, armor, female);
+  function heroInline(look, px) {
+    const { rows, pal } = heroGrid(look);
     return gridSVG(rows, pal, px);
   }
 

@@ -233,7 +233,7 @@ const Chat = (() => {
     const rows = `<div class="dim2 talk-note">${aiReady() ? `仲間と自由に会話できます（${providerLabel()} が答えます）` : '仲間と会話できます。<br>メニューの「AI設定」でAIにつなぐと、どんな話題にも自由に答えてくれます。'}</div>
       <div class="member-picker">${ps.map(id => {
         const m = game.party.find(x => x.companion === id);
-        const face = id === 'princess' ? Art.princessInline(28) : Art.heroInline(m.job, m.weapon, m.armor, 28, isFemale(m));
+        const face = id === 'princess' ? Art.princessInline(28) : faceOf(m, 28);
         return `<button class="pick-btn" data-talk="${id}">${face}<span>${esc(who(id).name)}<small>${PERSONAS[id].job}</small></span></button>`;
       }).join('')}</div>`;
     openShop('[ はなす ]', rows);
@@ -245,7 +245,7 @@ const Chat = (() => {
     game.inputEnabled = false;
     const p = who(id);
     const m = game.party.find(x => x.companion === id);
-    $('chat-face').innerHTML = id === 'princess' ? Art.princessInline(40) : Art.heroInline(m.job, m.weapon, m.armor, 40, isFemale(m));
+    $('chat-face').innerHTML = id === 'princess' ? Art.princessInline(40) : faceOf(m, 40);
     $('chat-name').textContent = `${p.name}（${p.job}）`;
     updateBadge();
     const log = $('chat-log');
@@ -304,7 +304,7 @@ const Chat = (() => {
   function situation() {
     const f = game.flags;
     const where = MAP_NAMES[game.currentMap];
-    const party = game.party.map(m => `${m.name}（${JOBS[m.job].name} LV${m.lv} HP${m.hp}/${m.maxHp} MP${m.mp}/${getMaxMp(m)}${m.hp <= 0 ? ' 倒れている' : ''}${m.poisoned ? ' 毒' : ''} 装備:${WEAPONS[m.weapon].name}・${ARMORS[m.armor].name}）`).join('、');
+    const party = game.party.map(m => `${m.name}（${JOBS[m.job].name} LV${m.lv} HP${m.hp}/${m.maxHp} MP${m.mp}/${getMaxMp(m)}${m.hp <= 0 ? ' 倒れている' : ''}${m.poisoned ? ' 毒' : ''} 装備:${weaponOf(m).name}・${clothesOf(m).name}${armorOf(m) ? '・' + armorOf(m).name : ''}${accOf(m) ? '・' + accOf(m).name : ''}）`).join('、');
     const progress = f.princessRescued ? '竜を倒し、姫を救出した。あとは町の城へ姫を連れ帰るだけ。'
       : f.bossDefeated ? '暗黒竜ヴォルガンを倒した。B5Fの牢に姫がいる。'
       : f.golemDefeated ? 'B3Fの門番ゴーレムを倒した。竜はB5Fにいる。B4Fには職業ごとの伝説の武器が眠っている。'
@@ -506,7 +506,7 @@ ${situation()}
       const m = game.party.find(x => x.companion === ln.id);
       const face = document.createElement('span');
       face.className = 'scene-face';
-      face.innerHTML = ln.id === 'princess' ? Art.princessInline(28) : Art.heroInline(m.job, m.weapon, m.armor, 28, isFemale(m));
+      face.innerHTML = ln.id === 'princess' ? Art.princessInline(28) : faceOf(m, 28);
       const name = document.createElement('b');
       name.textContent = who(ln.id).name;
       const text = document.createElement('span');

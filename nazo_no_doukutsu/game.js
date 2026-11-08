@@ -96,7 +96,7 @@ const INTROS = {
 function introCard(id, pr, opts = {}) {
   const job = id === 'princess' ? '姫' : JOBS[COMPANIONS[id].job].name;
   const face = id === 'princess' ? Art.princessInline(44)
-    : Art.heroInline(COMPANIONS[id].job, JOBS[COMPANIONS[id].job].weapon, 'cloth', 44, pr.gender === '女性');
+    : Art.heroInline(defaultLook(COMPANIONS[id].job, pr.gender === '女性'), 44);
   const name = id === 'princess' ? `${pr.name}姫` : pr.name;
   const custom = pr.personality !== DEFAULT_PROFILES[id].personality;
   return `<div class="intro-card">
@@ -186,7 +186,6 @@ const LEGEND_WEAPON = { warrior: 'hero_sword', mage: 'sage_staff', priest: 'holy
 const WEAPON_SHOP_LIST = ['iron_sword', 'mace', 'magic_staff', 'ninja_blade', 'mithril_sword'];
 
 const ARMORS = {
-  cloth:         { name: '布の服',       def: 1,  price: 0,    sell: 0,   jobs: ['warrior', 'mage', 'priest', 'thief'], mpBonus: 0, escapeBonus: 0 },
   leather_armor: { name: '革の鎧',       def: 4,  price: 100,  sell: 50,  jobs: ['warrior', 'mage', 'priest', 'thief'], mpBonus: 0, escapeBonus: 0 },
   magic_robe:    { name: '魔法のローブ', def: 4,  price: 250,  sell: 125, jobs: ['mage', 'priest'], mpBonus: 10, escapeBonus: 0 },
   iron_armor:    { name: '鉄の鎧',       def: 9,  price: 320,  sell: 160, jobs: ['warrior', 'priest'], mpBonus: 0, escapeBonus: 0 },
@@ -195,6 +194,38 @@ const ARMORS = {
   mithril_armor: { name: 'ミスリル鎧',   def: 17, price: 1000, sell: 500, jobs: ['warrior'], mpBonus: 0, escapeBonus: 0 },
 };
 const ARMOR_SHOP_LIST = ['leather_armor', 'magic_robe', 'iron_armor', 'shadow_armor', 'holy_robe', 'mithril_armor'];
+
+const ALL_JOBS = ['warrior', 'mage', 'priest', 'thief'];
+// 下地の服（必ず何か着ている）
+const CLOTHES = {
+  cloth:       { name: '布の服',           def: 1, mp: 0, price: 0,   sell: 0,   jobs: ALL_JOBS },
+  traveler:    { name: '旅人の服',         def: 2, mp: 0, price: 60,  sell: 30,  jobs: ALL_JOBS },
+  onepiece:    { name: 'ワンピース',       def: 2, mp: 3, price: 90,  sell: 45,  jobs: ALL_JOBS },
+  dougi:       { name: '武道着',           def: 4, mp: 0, price: 140, sell: 70,  jobs: ['warrior', 'thief'] },
+  frill_dress: { name: 'フリルのドレス',   def: 3, mp: 6, price: 220, sell: 110, jobs: ALL_JOBS },
+  apron_dress: { name: 'エプロンドレス',   def: 4, mp: 4, price: 300, sell: 150, jobs: ALL_JOBS },
+};
+const CLOTHES_SHOP_LIST = ['traveler', 'onepiece', 'dougi', 'frill_dress', 'apron_dress'];
+// アクセサリー（1つまで）
+const ACCESSORIES = {
+  ribbon:        { name: '星のリボン',       atk: 0, def: 1, mp: 5,  magic: 0,   escape: 0,    price: 150, sell: 75,  desc: '防+1 MP+5' },
+  guard_ring:    { name: '守りの指輪',       atk: 0, def: 4, mp: 0,  magic: 0,   escape: 0,    price: 300, sell: 150, desc: '防+4' },
+  power_ring:    { name: '力の指輪',         atk: 4, def: 0, mp: 0,  magic: 0,   escape: 0,    price: 300, sell: 150, desc: '攻+4' },
+  wind_boots:    { name: '疾風のブーツ',     atk: 0, def: 1, mp: 0,  magic: 0,   escape: 0.2,  price: 250, sell: 125, desc: '防+1 逃げやすさ+20%' },
+  magic_pendant: { name: '魔力のペンダント', atk: 0, def: 0, mp: 15, magic: 0.1, escape: 0,    price: 420, sell: 210, desc: 'MP+15 魔力+10%' },
+  red_cape:      { name: '勇者のマント',     atk: 3, def: 3, mp: 0,  magic: 0,   escape: 0,    price: 550, sell: 275, desc: '攻+3 防+3' },
+};
+const ACC_SHOP_LIST = ['ribbon', 'guard_ring', 'power_ring', 'wind_boots', 'magic_pendant', 'red_cape'];
+const SLOTS = { weapon: WEAPONS, clothes: CLOTHES, armor: ARMORS, accessory: ACCESSORIES };
+const SLOT_NAMES = { weapon: '武器', clothes: '服', armor: '鎧・ローブ', accessory: 'アクセサリー' };
+const BARE = { name: '素手', atk: 0, magicBonus: 0, escapeBonus: 0 };
+function slotOf(id) { return Object.keys(SLOTS).find(k => SLOTS[k][id]) || null; }
+function gearName(id) { const k = slotOf(id); return k ? SLOTS[k][id].name : '？'; }
+function canWear(m, id) { const k = slotOf(id); return !!k && (k === 'accessory' || SLOTS[k][id].jobs.includes(m.job)); }
+const weaponOf = m => WEAPONS[m.weapon] || BARE;
+const clothesOf = m => CLOTHES[m.clothes] || CLOTHES.cloth;
+const armorOf = m => (m.armor && ARMORS[m.armor]) || null;
+const accOf = m => (m.accessory && ACCESSORIES[m.accessory]) || null;
 
 const CONSUMABLES = {
   herb:       { name: '薬草',     effect: 'heal',     power: 30,  price: 10,  sell: 5,  desc: 'HPを30回復' },
@@ -258,6 +289,7 @@ function newGameState() {
     party: [],             // [0] が主人公
     gold: 120,
     items: [{ id: 'herb', count: 4 }],
+    bag: [],               // しまってある装備（ID の配列）
     pos: { x: 0, y: 0 },
     maps: {},
     currentMap: 'town',
@@ -326,7 +358,7 @@ function createMember(name, jobKey, lv, companionId) {
     hp: job.base.hp, maxHp: job.base.hp,
     mp: job.base.mp, maxMp: job.base.mp,
     baseAtk: job.base.atk, baseDef: job.base.def,
-    weapon: job.weapon, armor: 'cloth',
+    weapon: job.weapon, clothes: 'cloth', armor: null, accessory: null,
     spells: [...job.spells], poisoned: false,
   };
   while (m.lv < (lv || 1)) levelUpOnce(m);
@@ -343,10 +375,33 @@ function levelUpOnce(m) {
   m.baseDef += g.def;
 }
 function expNeeded(lv) { return 6 * lv * (lv + 3); }
-function getAtk(m) { return m.baseAtk + WEAPONS[m.weapon].atk; }
-function getDef(m) { return m.baseDef + ARMORS[m.armor].def; }
-function getMaxMp(m) { return m.maxMp + ARMORS[m.armor].mpBonus; }
-function magicMul(m) { return 1 + WEAPONS[m.weapon].magicBonus; }
+function getAtk(m) { return m.baseAtk + weaponOf(m).atk + (accOf(m) ? accOf(m).atk : 0); }
+function getDef(m) { return m.baseDef + clothesOf(m).def + (armorOf(m) ? armorOf(m).def : 0) + (accOf(m) ? accOf(m).def : 0); }
+function getMaxMp(m) { return m.maxMp + clothesOf(m).mp + (armorOf(m) ? armorOf(m).mpBonus : 0) + (accOf(m) ? accOf(m).mp : 0); }
+function magicMul(m) { return 1 + weaponOf(m).magicBonus + (accOf(m) ? accOf(m).magic : 0); }
+function escapeBonus(m) { return weaponOf(m).escapeBonus + (armorOf(m) ? armorOf(m).escapeBonus : 0) + (accOf(m) ? accOf(m).escape : 0); }
+
+// 見た目（装備・性別）
+function lookOf(m) {
+  return { job: m.job, weapon: m.weapon, clothes: m.clothes || 'cloth', armor: m.armor, accessory: m.accessory, female: isFemale(m) };
+}
+function faceOf(m, px) { return Art.heroInline(lookOf(m), px); }
+function spriteOf(m) { return Art.heroURL(lookOf(m)); }
+function defaultLook(job, female) { return { job, weapon: JOBS[job].weapon, clothes: 'cloth', armor: null, accessory: null, female }; }
+
+// ---------- 装備袋 ----------
+function addGear(id) { game.bag.push(id); }
+function takeGear(id) { const i = game.bag.indexOf(id); if (i >= 0) game.bag.splice(i, 1); return i >= 0; }
+// 装備を付け替える（外した物は袋へ）
+// 布の服はいつでも着られる（袋には入れない）
+function equip(m, slot, id) {
+  if (id && id !== 'cloth' && !takeGear(id)) return false;
+  const old = m[slot];
+  if (old && old !== 'cloth') addGear(old);
+  m[slot] = id || (slot === 'clothes' ? 'cloth' : null);
+  m.mp = Math.min(m.mp, getMaxMp(m));
+  return true;
+}
 
 // =============================
 // マップ生成
@@ -510,7 +565,7 @@ function fitMap() {
 }
 
 function followerList() {
-  const list = game.party.slice(1).map(m => ({ sprite: Art.heroURL(m.job, m.weapon, m.armor, isFemale(m)), dead: m.hp <= 0 }));
+  const list = game.party.slice(1).map(m => ({ sprite: spriteOf(m), dead: m.hp <= 0 }));
   if (game.flags.princessRescued) list.push({ sprite: Art.princessSprite() });
   return list;
 }
@@ -550,9 +605,9 @@ function renderMap() {
       const look = Art.cellLayers(game.currentMap, grid[my][mx]);
       const layers = [...look.layers];
       const npc = townNpcAt(mx, my);
-      if (npc) { const j = COMPANIONS[npc].job; layers.unshift(Art.heroURL(j, JOBS[j].weapon, 'cloth', game.profiles[npc].gender === '女性')); }
+      if (npc) { const j = COMPANIONS[npc].job; layers.unshift(Art.heroURL(defaultLook(j, game.profiles[npc].gender === '女性'))); }
       if (!isPlayer && followAt[key]) layers.unshift(followAt[key].sprite);
-      if (isPlayer) { const h = hero(); layers.unshift(Art.heroURL(h.job, h.weapon, h.armor, isFemale(h))); }
+      if (isPlayer) { const h = hero(); layers.unshift(spriteOf(h)); }
       tile.style.backgroundImage = layers.join(',');
       if (!isPlayer && followAt[key] && followAt[key].dead) tile.classList.add('ghost');
       if (look.label && !isPlayer) {
@@ -606,11 +661,11 @@ function updateStatusPanel() {
     setBar('sp-hp-' + i, m.hp, m.maxHp);
     setBar('sp-mp-' + i, m.mp, getMaxMp(m));
     const face = $('pm-face-' + i);
-    const look = `${m.job}|${m.weapon}|${m.armor}|${isFemale(m)}`;
+    const look = JSON.stringify(lookOf(m));
     if (face.dataset.look !== look) {
       face.dataset.look = look;
-      face.innerHTML = Art.heroInline(m.job, m.weapon, m.armor, 40, isFemale(m));
-      $('pm-equip-' + i).innerHTML = `<span class="eq-w"><b>武</b>${WEAPONS[m.weapon].name}</span><span class="eq-a"><b>防</b>${ARMORS[m.armor].name}</span>`;
+      face.innerHTML = faceOf(m, 40);
+      $('pm-equip-' + i).innerHTML = `<span class="eq-w"><b>武</b>${weaponOf(m).name}</span><span class="eq-a"><b>${armorOf(m) ? '鎧' : '服'}</b>${armorOf(m) ? armorOf(m).name : clothesOf(m).name}</span>${accOf(m) ? `<span class="eq-x"><b>飾</b>${accOf(m).name}</span>` : ''}`;
     }
     $('pm-card-' + i).classList.toggle('dead', m.hp <= 0);
   });
@@ -849,6 +904,12 @@ function checkEncounter(cell) {
 function openChest(no) {
   setCell(TILE.CHEST_OPEN);
   Sound.sfx('chest');
+  if (no >= 2 && Math.random() < 0.12) {
+    const acc = pick(['ribbon', 'guard_ring', 'power_ring', 'wind_boots', no >= 4 ? 'magic_pendant' : 'ribbon']);
+    addGear(acc);
+    addMessage(`宝箱を開けた！ ${ACCESSORIES[acc].name}を手に入れた！（メニューの「そうび」で身に付けよう）`, '#ffd700');
+    return;
+  }
   if (Math.random() < 0.4) {
     const g = rand(20, 40) * no;
     game.gold += g;
@@ -869,12 +930,13 @@ function openLegendChest() {
   setCell(TILE.CHEST_OPEN);
   const h = hero();
   const id = LEGEND_WEAPON[h.job];
+  if (h.weapon) addGear(h.weapon);
   h.weapon = id;
   game.flags.legendTaken = true;
   addMemoryAll(`${h.name}がB4Fで伝説の武器「${WEAPONS[id].name}」を手に入れた`);
   Sound.sfx('levelup');
   flashScreen('gold');
-  openDialog('[ 伝説の武器 ]', `古びた宝箱の中に、<span style="color:#ffd700">${WEAPONS[id].name}</span>が眠っていた！<br>${esc(h.name)}が手に取ると、力がみなぎってくる…<br><br>${esc(h.name)}は${WEAPONS[id].name}を装備した。（攻撃力 +${WEAPONS[id].atk}）`);
+  openDialog('[ 伝説の武器 ]', `古びた宝箱の中に、<span style="color:#ffd700">${WEAPONS[id].name}</span>が眠っていた！<br>${esc(h.name)}が手に取ると、力がみなぎってくる…<br><br>${esc(h.name)}は${WEAPONS[id].name}を装備した。（攻撃力 +${WEAPONS[id].atk}）<br><small>もとの武器は装備袋にしまった。</small>`);
 }
 
 function triggerTrap(no) {
@@ -1109,7 +1171,7 @@ function buildBattleStage() {
   const bs = battleState;
   $('bf-party').innerHTML = game.party.map((m, i) => `
     <div class="bf-row" id="bf-pmrow-${i}" data-idx="${i}">
-      <div class="bf-sprite" id="bf-pm-${i}">${Art.heroInline(m.job, m.weapon, m.armor, 52, isFemale(m))}</div>
+      <div class="bf-sprite" id="bf-pm-${i}">${faceOf(m, 52)}</div>
       <div class="bf-info">
         <div class="bf-name">${esc(m.name)}<span class="bf-tag" id="bf-pmtag-${i}"></span></div>
         <div class="bar-row"><span class="bar-label">HP</span>${barHTML('bh-hp-' + i)}</div>
@@ -1652,7 +1714,7 @@ function doRun() {
   const m = game.party[battleState.actor];
   const thief = aliveMembers().some(o => o.m.job === 'thief');
   let rate = thief ? CONFIG.ESCAPE_RATE_THIEF : CONFIG.ESCAPE_RATE;
-  rate = clamp(rate + ARMORS[m.armor].escapeBonus + WEAPONS[m.weapon].escapeBonus, 0, 1);
+  rate = clamp(rate + escapeBonus(m), 0, 1);
   if (Math.random() < rate) {
     Sound.sfx('run');
     addBattleLog('うまく逃げ出した！', '#aaa');
@@ -1876,7 +1938,7 @@ let shopWho = 0;
 function memberPicker(onPick) {
   if (shopWho >= game.party.length) shopWho = 0;
   const html = `<div class="member-picker">${game.party.map((m, i) =>
-    `<button class="pick-btn ${i === shopWho ? 'on' : ''}" data-pick="${i}">${Art.heroInline(m.job, m.weapon, m.armor, 28, isFemale(m))}<span>${esc(m.name)}</span></button>`).join('')}</div>`;
+    `<button class="pick-btn ${i === shopWho ? 'on' : ''}" data-pick="${i}">${faceOf(m, 28)}<span>${esc(m.name)}</span></button>`).join('')}</div>`;
   return { html, bind: () => document.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => { shopWho = parseInt(b.dataset.pick, 10); Sound.sfx('select'); onPick(); })) };
 }
 
@@ -1930,14 +1992,16 @@ function openPartyMenu() {
   let rows = '';
   game.party.forEach((m, i) => {
     rows += `<div class="party-detail ${m.hp <= 0 ? 'dead' : ''}">
-      <div class="pd-face">${Art.heroInline(m.job, m.weapon, m.armor, 48, isFemale(m))}</div>
+      <div class="pd-face">${faceOf(m, 48)}</div>
       <div class="pd-info">
         <div><b>${esc(m.name)}</b>　${JOBS[m.job].name} LV${m.lv}${m.hp <= 0 ? '　<span style="color:#f66">倒れている</span>' : ''}</div>
         <div class="dim2">HP ${m.hp}/${m.maxHp}　MP ${m.mp}/${getMaxMp(m)}　攻${getAtk(m)}　防${getDef(m)}</div>
-        <div class="dim2">${WEAPONS[m.weapon].name} ／ ${ARMORS[m.armor].name}　EXP ${m.exp}/${m.expNext}</div>
+        <div class="dim2">武器:${weaponOf(m).name}　服:${clothesOf(m).name}　鎧:${armorOf(m) ? armorOf(m).name : 'なし'}　飾り:${accOf(m) ? accOf(m).name : 'なし'}</div>
+        <div class="dim2">EXP ${m.exp}/${m.expNext}</div>
         <div class="dim2">魔法: ${m.spells.length ? m.spells.map(s => SPELLS[s].name).join('・') : 'なし'}</div>
       </div>
       <div class="pd-btns">
+        <button class="shop-btn" data-equip-who="${i}">装備</button>
         <button class="shop-btn" data-profile="${i === 0 ? 'hero' : m.companion}">設定</button>
         ${i > 0 && inTown ? `<button class="shop-btn" data-dismiss="${i}">外す</button>` : ''}
       </div>
@@ -1948,6 +2012,7 @@ function openPartyMenu() {
   if (game.party.length < 3) rows += '<div class="dim">町の人に話しかけると、仲間になってくれる人がいる。</div>';
   openShop('[ なかま ]', rows);
   document.querySelectorAll('[data-profile]').forEach(b => b.addEventListener('click', () => openProfileEditor(b.dataset.profile)));
+  document.querySelectorAll('[data-equip-who]').forEach(b => b.addEventListener('click', () => { shopWho = parseInt(b.dataset.equipWho, 10); openEquipMenu(); }));
   document.querySelectorAll('[data-dismiss]').forEach(b => b.addEventListener('click', () => {
     const m = game.party[parseInt(b.dataset.dismiss, 10)];
     game.party.splice(parseInt(b.dataset.dismiss, 10), 1);
@@ -1964,7 +2029,7 @@ function openProfileEditor(id) {
   const member = isHero ? hero() : game.party.find(m => m.companion === id);
   const fixedName = isHero || id === 'princess';
   const name = isHero ? hero().name : pr.name;
-  const face = id === 'princess' ? Art.princessInline(40) : Art.heroInline(member.job, member.weapon, member.armor, 40, isFemale(member));
+  const face = id === 'princess' ? Art.princessInline(40) : faceOf(member, 40);
   openShop(`[ ${name}の設定 ]`, `
     <div class="profile-form">
       <div class="pf-head">${face}<div class="dim2">${isHero ? 'あなた（主人公）の設定です。仲間はこれを知った上で話します。' : 'ここに書いた内容を見て、AIがこの人物として話します。'}</div></div>
@@ -2101,48 +2166,115 @@ function openMagicShop() {
   }));
 }
 
+// 武器屋（weapon）と防具屋（armor：鎧・服・アクセサリー）
+let armorTab = 'armor';
 function openEquipShop(type) {
   const reopen = () => openEquipShop(type);
   const picker = memberPicker(reopen);
   const m = game.party[shopWho];
-  const catalog = type === 'weapon' ? WEAPONS : ARMORS;
-  const list = type === 'weapon' ? WEAPON_SHOP_LIST : ARMOR_SHOP_LIST;
-  const cur = m[type];
-  let rows = picker.html + `<div class="shop-section-title">${esc(m.name)}の装備: ${catalog[cur].name}</div>`;
+  const slot = type === 'weapon' ? 'weapon' : armorTab;
+  const catalog = SLOTS[slot];
+  const list = { weapon: WEAPON_SHOP_LIST, armor: ARMOR_SHOP_LIST, clothes: CLOTHES_SHOP_LIST, accessory: ACC_SHOP_LIST }[slot];
+  const stat = it => slot === 'weapon' ? `攻+${it.atk}${it.magicBonus ? ` 魔力${Math.round(it.magicBonus * 100)}%` : ''}`
+    : slot === 'armor' ? `防+${it.def}${it.mpBonus ? ` MP+${it.mpBonus}` : ''}`
+    : slot === 'clothes' ? `防+${it.def}${it.mp ? ` MP+${it.mp}` : ''}` : it.desc;
+  const cur = m[slot];
+  let rows = picker.html;
+  if (type === 'armor') {
+    rows += `<div class="tab-row">${['armor', 'clothes', 'accessory'].map(t => `<button class="pick-btn ${t === armorTab ? 'on' : ''}" data-tab="${t}">${SLOT_NAMES[t]}</button>`).join('')}</div>`;
+  }
+  rows += `<div class="shop-section-title">${esc(m.name)}の${SLOT_NAMES[slot]}: ${cur ? catalog[cur].name : 'なし'}</div>`;
   for (const id of list) {
     const it = catalog[id];
-    const can = it.jobs.includes(m.job);
+    const can = slot === 'accessory' || it.jobs.includes(m.job);
     const dis = !can || game.gold < it.price || id === cur;
-    const stat = type === 'weapon' ? `攻+${it.atk}${it.magicBonus ? ` 魔力${Math.round(it.magicBonus * 100)}%` : ''}` : `防+${it.def}${it.mpBonus ? ` MP+${it.mpBonus}` : ''}`;
     rows += `<div class="shop-item-row ${dis ? 'disabled' : ''}">
-      <span class="shop-item-name">${it.name}<small>${stat}${can ? '' : '（装備できない）'}</small></span>
+      <span class="shop-item-name">${it.name}<small>${stat(it)}${can ? '' : '（装備できない）'}</small></span>
       <span class="shop-item-price">${id === cur ? '装備中' : it.price + 'P'}</span>
       <button class="shop-btn" data-buy-equip="${id}" ${dis ? 'disabled' : ''}>買う</button></div>`;
   }
-  const cItem = catalog[cur];
-  rows += '<div class="shop-section-title">売る</div>';
-  rows += cItem.sell
-    ? `<div class="shop-item-row"><span class="shop-item-name">${cItem.name}</span><span class="shop-item-price">${cItem.sell}P</span><button class="shop-btn" data-sell-equip="1">売る</button></div>`
-    : `<div class="shop-item-row disabled"><span class="shop-item-name">${cItem.name}</span><span>売れない</span></div>`;
-  openShop(type === 'weapon' ? '[ 武器屋 ]' : '[ 防具屋 ]', rows + goldLine());
+  // 売る：袋の中の、この店で扱う種類の装備
+  const kinds = type === 'weapon' ? ['weapon'] : ['armor', 'clothes', 'accessory'];
+  const sellable = game.bag.filter(id => kinds.includes(slotOf(id)));
+  rows += '<div class="shop-section-title">売る（装備袋の中の物）</div>';
+  if (!sellable.length) rows += '<div class="dim">売れる物がない（身に付けている物は、外してから売れる）</div>';
+  [...new Set(sellable)].forEach(id => {
+    const it = SLOTS[slotOf(id)][id];
+    const n = sellable.filter(x => x === id).length;
+    rows += `<div class="shop-item-row"><span class="shop-item-name">${it.name}${n > 1 ? ` ×${n}` : ''}</span><span class="shop-item-price">${it.sell}P</span><button class="shop-btn" data-sell-gear="${id}" ${it.sell ? '' : 'disabled'}>売る</button></div>`;
+  });
+  openShop(type === 'weapon' ? '[ 武器屋 ]' : '[ 防具屋 ]', rows + goldLine() + '<div class="dim">買った物はすぐ身に付ける。外した物は装備袋に入り、メニューの「そうび」でいつでも付け替えられる。</div>');
   picker.bind();
+  document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => { armorTab = b.dataset.tab; Sound.sfx('select'); reopen(); }));
   document.querySelectorAll('[data-buy-equip]').forEach(b => b.addEventListener('click', () => {
     const id = b.dataset.buyEquip;
     game.gold -= catalog[id].price;
-    m[type] = id;
-    if (type === 'armor') m.mp = Math.min(m.mp, getMaxMp(m));
+    addGear(id);
+    equip(m, slot, id);
     Sound.sfx('coin');
-    addMessage(`${m.name}は${catalog[id].name}を装備した！`, '#0af');
+    addMessage(`${m.name}は${catalog[id].name}を身に付けた！`, '#0af');
     reopen();
   }));
-  document.querySelector('[data-sell-equip]')?.addEventListener('click', () => {
-    game.gold += cItem.sell;
-    m[type] = type === 'weapon' ? JOBS[m.job].weapon : 'cloth';
-    if (type === 'armor') m.mp = Math.min(m.mp, getMaxMp(m));
+  document.querySelectorAll('[data-sell-gear]').forEach(b => b.addEventListener('click', () => {
+    const id = b.dataset.sellGear;
+    if (!takeGear(id)) return;
+    const it = SLOTS[slotOf(id)][id];
+    game.gold += it.sell;
     Sound.sfx('coin');
-    addMessage(`${cItem.name}を売った。+${cItem.sell}P`, '#ffd700');
+    addMessage(`${it.name}を売った。+${it.sell}P`, '#ffd700');
     reopen();
+  }));
+}
+
+// ---------- そうび（付け替え） ----------
+function openEquipMenu(slot) {
+  if (shopWho >= game.party.length) shopWho = 0;
+  const picker = memberPicker(() => openEquipMenu());
+  const m = game.party[shopWho];
+  const cur = { weapon: weaponOf(m), clothes: clothesOf(m), armor: armorOf(m), accessory: accOf(m) };
+  const statLine = x => `攻${getAtk(x)} 防${getDef(x)} MP上限${getMaxMp(x)}`;
+  let rows = picker.html + `<div class="equip-head"><div class="eq-face">${faceOf(m, 64)}</div><div><b>${esc(m.name)}</b>（${JOBS[m.job].name}）<div class="dim2">${statLine(m)}</div></div></div>`;
+  if (!slot) {
+    for (const k of ['weapon', 'clothes', 'armor', 'accessory']) {
+      const it = cur[k];
+      rows += `<div class="shop-item-row"><span class="shop-item-name"><small>${SLOT_NAMES[k]}</small>${it ? it.name : 'なし'}</span>
+        <button class="shop-btn" data-slot="${k}">変える</button></div>`;
+    }
+    rows += `<div class="dim">装備袋：${game.bag.length ? [...new Set(game.bag)].map(id => `${gearName(id)}${game.bag.filter(x => x === id).length > 1 ? '×' + game.bag.filter(x => x === id).length : ''}`).join('、') : '空っぽ'}</div>`;
+    openShop('[ そうび ]', rows);
+    picker.bind();
+    document.querySelectorAll('[data-slot]').forEach(b => b.addEventListener('click', () => openEquipMenu(b.dataset.slot)));
+    return;
+  }
+  // 選んだ部位の候補：袋の中の、その人が身に付けられる物
+  const cands = [...new Set(game.bag.filter(id => slotOf(id) === slot && canWear(m, id)))];
+  if (slot === 'clothes' && m.clothes !== 'cloth') cands.unshift('cloth');
+  rows += `<div class="shop-section-title">${SLOT_NAMES[slot]}を選ぶ（いま：${cur[slot] ? cur[slot].name : 'なし'}）</div>`;
+  const preview = id => {
+    const t = { ...m, [slot]: id };
+    const d = (a, b2) => (a > b2 ? `<span class="up">+${a - b2}</span>` : a < b2 ? `<span class="down">${a - b2}</span>` : '');
+    return `攻${getAtk(t)}${d(getAtk(t), getAtk(m))} 防${getDef(t)}${d(getDef(t), getDef(m))} MP${getMaxMp(t)}${d(getMaxMp(t), getMaxMp(m))}`;
+  };
+  if (!cands.length) rows += '<div class="dim">身に付けられる物が袋にない。店で買うか、宝箱で見つけよう。</div>';
+  cands.forEach(id => {
+    rows += `<div class="shop-item-row"><span class="shop-item-name">${SLOTS[slot][id].name}<small>${preview(id)}</small></span>
+      <button class="shop-btn" data-wear="${id}">付ける</button></div>`;
   });
+  if (cur[slot] && slot !== 'clothes') {
+    rows += `<div class="shop-item-row"><span class="shop-item-name">外す<small>${preview(null)}</small></span><button class="shop-btn" data-wear="">外す</button></div>`;
+  }
+  rows += '<div class="shop-row-btns"><button class="shop-btn" id="btn-equip-back">← もどる</button></div>';
+  openShop('[ そうび ]', rows);
+  picker.bind();
+  document.querySelectorAll('[data-wear]').forEach(b => b.addEventListener('click', () => {
+    const id = b.dataset.wear || null;
+    if (equip(m, slot, id)) {
+      Sound.sfx('select');
+      addMessage(id ? `${m.name}は${gearName(id)}を身に付けた。` : `${m.name}は${SLOT_NAMES[slot]}を外した。`, '#0af');
+    }
+    openEquipMenu();
+  }));
+  $('btn-equip-back').addEventListener('click', () => openEquipMenu());
 }
 
 function openItemShop() {
@@ -2306,7 +2438,7 @@ function openWarpMenu(title, onGo) {
 // ---------- フィールドで道具・魔法を使う ----------
 function targetButtons(attr, filter) {
   return `<div class="member-picker">${game.party.map((m, i) => filter(m)
-    ? `<button class="pick-btn" ${attr}="${i}">${Art.heroInline(m.job, m.weapon, m.armor, 28, isFemale(m))}<span>${esc(m.name)}<small>${m.hp}/${m.maxHp}</small></span></button>` : '').join('')}</div>`;
+    ? `<button class="pick-btn" ${attr}="${i}">${faceOf(m, 28)}<span>${esc(m.name)}<small>${m.hp}/${m.maxHp}</small></span></button>` : '').join('')}</div>`;
 }
 
 function openFieldItems(selected) {
@@ -2391,7 +2523,7 @@ function openFieldMagic(casterIdx, sid) {
   }
   let rows = `<div class="member-picker">${casters.map(i => {
     const c = game.party[i];
-    return `<button class="pick-btn ${i === casterIdx ? 'on' : ''}" data-caster="${i}">${Art.heroInline(c.job, c.weapon, c.armor, 28, isFemale(c))}<span>${esc(c.name)}<small>MP${c.mp}</small></span></button>`;
+    return `<button class="pick-btn ${i === casterIdx ? 'on' : ''}" data-caster="${i}">${faceOf(c, 28)}<span>${esc(c.name)}<small>MP${c.mp}</small></span></button>`;
   }).join('')}</div>`;
   for (const s of m.spells.filter(s => FIELD_SPELL_TYPES.includes(SPELLS[s].type))) {
     const sp = SPELLS[s];
@@ -2423,7 +2555,7 @@ function saveToSlot(slot) {
     version: 3,
     savedAt: formatNow(),
     charInfo: { name: h.name, job: h.job, lv: h.lv, location: MAP_NAMES[game.currentMap], party: game.party.length },
-    party: game.party, gold: game.gold, items: game.items, pos: game.pos,
+    party: game.party, gold: game.gold, items: game.items, bag: game.bag, pos: game.pos,
     currentMap: game.currentMap, maps,
     explored: Object.fromEntries(Object.entries(game.explored).map(([k, v]) => [k, [...v]])),
     flags: game.flags, stats: game.stats, profiles: game.profiles,
@@ -2439,7 +2571,7 @@ function loadFromSlot(slot) {
   try {
     const d = sanitizeSave(JSON.parse(raw));
     const st = newGameState();
-    Object.assign(st, { party: d.party, gold: d.gold, items: d.items, pos: d.pos, currentMap: d.currentMap });
+    Object.assign(st, { party: d.party, gold: d.gold, items: d.items, bag: d.bag, pos: d.pos, currentMap: d.currentMap });
     st.maps = {};
     for (const [id, m] of Object.entries(d.maps)) st.maps[id] = { ...m, grid: m.grid.map(r => r.split('')) };
     st.explored = Object.fromEntries(Object.entries(d.explored).map(([k, v]) => [k, new Set(v)]));
@@ -2471,8 +2603,10 @@ function sanitizeSave(d) {
       maxMp: num(m.maxMp, base.maxMp, 0, 9999),
       baseAtk: num(m.baseAtk, base.baseAtk, 0, 999),
       baseDef: num(m.baseDef, base.baseDef, 0, 999),
-      weapon: WEAPONS[m.weapon] ? m.weapon : JOBS[job].weapon,
-      armor: ARMORS[m.armor] ? m.armor : 'cloth',
+      weapon: m.weapon === null ? null : (WEAPONS[m.weapon] ? m.weapon : JOBS[job].weapon),
+      clothes: CLOTHES[m.clothes] ? m.clothes : 'cloth',
+      armor: ARMORS[m.armor] ? m.armor : null,          // 以前の「布の服」は服として扱う
+      accessory: ACCESSORIES[m.accessory] ? m.accessory : null,
       spells: Array.isArray(m.spells) ? m.spells.filter(x => SPELLS[x]) : base.spells,
       poisoned: !!m.poisoned,
     };
@@ -2482,6 +2616,7 @@ function sanitizeSave(d) {
     return r;
   });
   d.gold = num(d.gold, 0, 0, 9999999);
+  d.bag = Array.isArray(d.bag) ? d.bag.filter(id => typeof id === 'string' && slotOf(id) && id !== 'cloth').slice(0, 200) : [];
   d.items = Array.isArray(d.items) ? d.items.filter(it => it && CONSUMABLES[it.id]).map(it => ({ id: it.id, count: num(it.count, 1, 1, CONFIG.MAX_ITEMS) })) : [];
   const ids = ['town', 'field', ...DUNGEONS];
   for (const id of ids) {
@@ -2613,7 +2748,7 @@ function triggerEnding() {
   const h = hero();
   showScreen('ending');
   Sound.bgm('ending');
-  $('ending-art').innerHTML = game.party.map(m => Art.heroInline(m.job, m.weapon, m.armor, 64, isFemale(m))).join('') + Art.princessInline(64);
+  $('ending-art').innerHTML = game.party.map(m => faceOf(m, 64)).join('') + Art.princessInline(64);
   const names = game.party.map(m => esc(m.name)).join('、');
   const treasure = game.flags.hasTreasure
     ? '一行が持ち帰った伝説の秘宝「竜の瞳」は、王国の宝として末永く守られたという。'
@@ -2797,7 +2932,7 @@ function initEvents() {
   });
   let heroGender = '男性';
   const drawJobIcons = () => document.querySelectorAll('.job-icon').forEach(el => {
-    el.innerHTML = Art.heroInline(el.dataset.job, JOBS[el.dataset.job].weapon, 'cloth', 44, heroGender === '女性');
+    el.innerHTML = Art.heroInline(defaultLook(el.dataset.job, heroGender === '女性'), 44);
   });
   document.querySelectorAll('[data-gender]').forEach(b => b.addEventListener('click', () => {
     heroGender = b.dataset.gender;
@@ -2847,6 +2982,7 @@ function initEvents() {
   $('btn-menu').addEventListener('click', toggleMenu);
   $('btn-menu-close').addEventListener('click', toggleMenu);
   $('btn-field-party').addEventListener('click', () => { toggleMenu(); openPartyMenu(); });
+  $('btn-field-equip').addEventListener('click', () => { toggleMenu(); openEquipMenu(); });
   $('btn-field-talk').addEventListener('click', () => { toggleMenu(); Chat.openTalkMenu(); });
   $('btn-ai-settings').addEventListener('click', () => { toggleMenu(); Chat.openSettings(false); });
   $('btn-ai-title').addEventListener('click', () => { Sound.sfx('select'); Chat.openSettings(true); });

@@ -697,3 +697,11 @@ button { font-family: inherit; }
 .create-row textarea { flex: 1; resize: vertical; line-height: 1.5; }
 .create-row .age-input { width: 100px; }
 #story-text small { display: block; color: #aab; font-size: 13px; margin-top: 6px; }
+
+/* そうび */
+.tab-row { display: flex; gap: 6px; margin: 4px 0; }
+.equip-head { display: flex; gap: 10px; align-items: center; color: #ddd; font-size: 14px; margin: 4px 0; }
+.eq-face svg { image-rendering: pixelated; display: block; }
+.shop-item-name small .up { color: #6f6; }
+.shop-item-name small .down { color: #f66; }
+.pm-equip .eq-x { color: #e0a0e8; }
