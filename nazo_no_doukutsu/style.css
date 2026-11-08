@@ -236,6 +236,13 @@ button { font-family: inherit; }
   background: #0a1430; color: #8ab4ff; border: 1px solid #3a5aaa; font-size: 12px;
   padding: 4px 10px; cursor: pointer; white-space: nowrap;
 }
+#btn-auto-mode {
+  background: #101010; color: #999; border: 1px solid #444; font-size: 12px;
+  padding: 4px 10px; cursor: pointer; white-space: nowrap;
+}
+#btn-auto-mode.on { background: #0a2a0a; color: #6f6; border-color: #3a3; box-shadow: 0 0 8px rgba(80, 255, 80, 0.35); animation: autoglow 1.4s infinite; }
+@keyframes autoglow { 50% { box-shadow: 0 0 2px rgba(80, 255, 80, 0.2); } }
+.battle-btn.auto-cmd { color: #9f9; border-color: #3a3; text-align: center; }
 #btn-target-mode.manual { background: #2a1a05; color: #ffcc66; border-color: #aa7a2a; }
 #battle-stage {
   position: relative;
@@ -590,4 +597,5 @@ button { font-family: inherit; }
   .bf-name { font-size: 11px; }
   .bf-info .bar-num { display: none; }
   #battle-head #battle-header { font-size: 13px; }
+  #btn-target-mode, #btn-auto-mode { font-size: 11px; padding: 3px 6px; }
 }

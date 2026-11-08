@@ -27,6 +27,7 @@ const CONFIG = {
   SOUND_KEY: 'nazo_no_doukutsu_muted',
   DPAD_KEY: 'nazo_no_doukutsu_dpad',
   TARGET_KEY: 'nazo_no_doukutsu_target',
+  AUTO_KEY: 'nazo_no_doukutsu_autobattle',
   SAVE_SLOTS: 3,
 };
 
@@ -942,6 +943,7 @@ function handleCursorEscape() {
 // =============================
 let battleState = null;
 let autoTarget = true;
+let autoBattle = false;   // フルオート（全員の行動をおまかせ）
 
 const pmEl = i => $('bf-pm-' + i);
 const enEl = i => $('bf-en-' + i);
@@ -990,8 +992,10 @@ function startBattle(kind) {
   if (kind === 'boss') addBattleLog('「愚かな人間どもめ…。姫は渡さぬ！」', '#ff6666');
   if (kind === 'golem') addBattleLog('「ココ ヨリ サキ ニハ トオサヌ」', '#ff9966');
   updateTargetToggle();
+  updateAutoToggle();
   battleState.actor = -1;
-  nextActor();
+  const thisBattle = battleState;
+  setTimeout(() => { if (battleState === thisBattle && !battleState.ended) nextActor(); }, autoBattle ? 450 : 0);
 }
 
 function buildBattleStage() {
@@ -1063,9 +1067,101 @@ function nextActor() {
   bs.actor = i;
   bs.defending.delete(i);
   const m = game.party[i];
+  if (autoBattle) {
+    setBusy(true);
+    $('battle-turn-msg').textContent = `オート：${m.name}の番`;
+    refreshBattle();
+    setTimeout(() => {
+      if (!battleState || battleState.ended || battleState.actor !== i) return;
+      if (!autoBattle) { setBusy(false); $('battle-turn-msg').textContent = `${m.name}は どうする？`; showBattleMainCmd(); return; }
+      const plan = autoChoose(i);
+      runAction(plan.action, plan.target);
+    }, 320);
+    return;
+  }
   setBusy(false);
   $('battle-turn-msg').textContent = `${m.name}は どうする？`;
   showBattleMainCmd();
+}
+
+// ---------- フルオートの判断 ----------
+function expectedPhys(m, e) { return Math.max(1, getAtk(m) - e.def / 2); }
+function expectedSpell(sid, m, e) {
+  const lv = m.lv, mul = magicMul(m);
+  let d = { fire: 20 + lv * 3, blizzard: 26 + lv * 4, thunder: 28 + lv * 4, holy: 21 + lv * 3 }[sid] * mul;
+  if (sid === 'blizzard') d -= e.def / 2;
+  if (sid === 'holy' && e.undead) d *= 2;
+  if (battleState.boss) d *= 0.65;
+  return Math.max(1, d);
+}
+function canCast(m, sid) { return m.spells.includes(sid) && m.mp >= SPELLS[sid].mp; }
+function hasItem(id) { return game.items.some(it => it.id === id); }
+
+function autoChoose(ai) {
+  const bs = battleState;
+  const m = game.party[ai];
+  const members = aliveMembers();
+  const dead = game.party.map((x, i) => ({ x, i })).filter(o => o.x.hp <= 0);
+  const foes = aliveEnemies();
+  const danger = bs.boss ? 0.5 : 0.38;
+  const isHealer = m.spells.some(s => SPELLS[s].type === 'heal');
+  // MPに余裕があるか（回復役は回復用のMPを残しておく）
+  const reserve = isHealer ? 8 : 0;
+  const spare = sid => m.mp - SPELLS[sid].mp >= reserve;
+
+  // 1) 倒れた仲間を起こす
+  if (dead.length) {
+    if (canCast(m, 'revive')) return { action: { type: 'spell', sid: 'revive' }, target: dead[0].i };
+    const reviver = members.some(o => o.i !== ai && canCast(o.m, 'revive'));
+    if (!reviver && hasItem('leaf') && (bs.boss || members.length === 1)) return { action: { type: 'item', id: 'leaf' }, target: dead[0].i };
+  }
+
+  // 2) 危ない仲間を回復する
+  const hurt = members.map(o => ({ ...o, r: o.m.hp / o.m.maxHp })).sort((a, b) => a.r - b.r);
+  const worst = hurt[0];
+  const lowCount = hurt.filter(o => o.r < 0.5).length;
+  if (lowCount >= 2 && canCast(m, 'healall')) return { action: { type: 'spell', sid: 'healall' }, target: -1 };
+  if (worst && worst.r < danger) {
+    const missing = worst.m.maxHp - worst.m.hp;
+    if (canCast(m, 'fullheal') && (missing > spellPower('heal', m) * 1.2 || !canCast(m, 'heal'))) return { action: { type: 'spell', sid: 'fullheal' }, target: worst.i };
+    if (canCast(m, 'heal')) return { action: { type: 'spell', sid: 'heal' }, target: worst.i };
+    // 回復役が他にいて、まだ動いていなければ任せる
+    const healerLater = members.some(o => o.i > ai && (canCast(o.m, 'heal') || canCast(o.m, 'fullheal')));
+    if (!healerLater || worst.r < 0.2) {
+      const herb = ['mega_herb', 'super_herb', 'herb'].find(id => hasItem(id) && (CONSUMABLES[id].power <= missing * 1.5 || id === 'herb'))
+        || ['mega_herb', 'super_herb', 'herb'].find(hasItem);
+      if (herb) return { action: { type: 'item', id: herb }, target: worst.i };
+    }
+  }
+
+  // 3) 竜戦では先頭に光の盾
+  if (bs.boss && canCast(m, 'protect') && !bs.protect.has(0) && game.party[0].hp > 0 && m.mp >= getMaxMp(m) * 0.5) {
+    return { action: { type: 'spell', sid: 'protect' }, target: 0 };
+  }
+
+  // 4) 攻撃：一番よく効く手を選ぶ
+  if (foes.length >= 2 && canCast(m, 'thunder') && spare('thunder')) return { action: { type: 'spell', sid: 'thunder' }, target: -1 };
+  const boss = foes.find(o => o.e.type === 'boss');
+  if (boss && !boss.e.poisoned && canCast(m, 'poison')) return { action: { type: 'spell', sid: 'poison' }, target: boss.i };
+
+  let best = null;
+  for (const o of foes) {
+    const phys = expectedPhys(m, o.e);
+    const options = [{ action: { type: 'attack' }, dmg: phys }];
+    for (const sid of ['fire', 'blizzard', 'holy']) {
+      if (canCast(m, sid) && spare(sid)) options.push({ action: { type: 'spell', sid }, dmg: expectedSpell(sid, m, o.e) });
+    }
+    if (o.e.undead && hasItem('holy_water') && phys < 40) options.push({ action: { type: 'item', id: 'holy_water' }, dmg: 95 });
+    for (const op of options) {
+      // MPを使う手は、物理より3割以上強い時だけ
+      const worth = op.action.type === 'attack' ? op.dmg : (op.dmg > phys * 1.3 ? op.dmg : 0);
+      const kill = worth >= o.e.hp;
+      // 倒せる相手を優先し、その中では手強い相手を、倒せなければ弱っている相手を狙う
+      const score = (kill ? 10000 + o.e.atk * 10 - (op.action.type === 'attack' ? 0 : 50) : worth * 2 - o.e.hp * 0.2) ;
+      if (!best || score > best.score) best = { score, action: op.action, target: o.i };
+    }
+  }
+  return best || { action: { type: 'attack' }, target: foes[0].i };
 }
 
 function showBattleMainCmd() {
@@ -2206,6 +2302,25 @@ function applyDpadSetting() {
   if (game.screen === 'game') setTimeout(() => { fitMap(); renderMap(); }, 50);
 }
 
+function updateAutoToggle() {
+  const b = $('btn-auto-mode');
+  if (!b) return;
+  b.textContent = autoBattle ? 'オート：ON' : 'オート：OFF';
+  b.classList.toggle('on', autoBattle);
+}
+
+function setAutoBattle(on) {
+  autoBattle = on;
+  store.setItem(CONFIG.AUTO_KEY, on ? 'on' : 'off');
+  updateAutoToggle();
+  Sound.sfx('select');
+  // 自分の番で待っている時にONにしたら、すぐ動き出す
+  if (on && battleState && !battleState.busy && !battleState.ended && battleState.actor >= 0) {
+    battleState.actor--;
+    nextActor();
+  }
+}
+
 function updateTargetToggle() {
   const b = $('btn-target-mode');
   b.textContent = autoTarget ? '狙い：自動' : '狙い：手動';
@@ -2270,7 +2385,7 @@ function initEvents() {
     addMessage(`${hero().name}の冒険が始まった！ まずは城の王に会おう。`, '#00ff41');
   });
 
-  document.querySelectorAll('.battle-btn[data-cmd]').forEach(b => b.addEventListener('click', () => onBattleCommand(b.dataset.cmd)));
+  document.querySelectorAll('.battle-btn[data-cmd]:not([data-cmd="auto"])').forEach(b => b.addEventListener('click', () => onBattleCommand(b.dataset.cmd)));
   $('btn-sub-back').addEventListener('click', () => { if (canAct()) showBattleMainCmd(); });
   $('btn-target-mode').addEventListener('click', () => {
     autoTarget = !autoTarget;
@@ -2278,6 +2393,8 @@ function initEvents() {
     updateTargetToggle();
     Sound.sfx('select');
   });
+  $('btn-auto-mode').addEventListener('click', () => setAutoBattle(!autoBattle));
+  document.querySelector('[data-cmd="auto"]').addEventListener('click', () => { if (canAct()) setAutoBattle(true); });
   $('btn-shop-close').addEventListener('click', closeShop);
 
   $('btn-menu').addEventListener('click', toggleMenu);
@@ -2360,6 +2477,7 @@ function startGameScreen() {
 function init() {
   Sound.setMuted(store.getItem(CONFIG.SOUND_KEY) === '1');
   autoTarget = store.getItem(CONFIG.TARGET_KEY) !== 'manual';
+  autoBattle = store.getItem(CONFIG.AUTO_KEY) === 'on';
   updateTitleLoadBtn();
   initEvents();
   showScreen('title');
