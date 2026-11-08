@@ -58,7 +58,7 @@ const Chat = (() => {
   const PROVIDERS = {
     anthropic: { label: 'Claude（Anthropic API）', model: 'claude-haiku-5-5', keyHint: 'sk-ant-…', site: 'console.anthropic.com' },
     openai:    { label: 'ChatGPT（OpenAI API）', model: 'gpt-5.6-luna', keyHint: 'sk-…', site: 'platform.openai.com' },
-    xai:       { label: 'Grok（xAI API）', model: 'grok-4.7', keyHint: 'xai-…', site: 'console.x.ai' },
+    xai:       { label: 'Grok（xAI API）', model: 'grok-4.3', keyHint: 'xai-…', site: 'console.x.ai' },
   };
   const CFG_KEY = 'nazo_no_doukutsu_ai';
   let cfg = { provider: 'auto', keys: {}, models: {}, remember: false };
@@ -67,7 +67,12 @@ const Chat = (() => {
     for (const st of [() => sessionStorage, () => localStorage]) {
       try {
         const raw = st().getItem(CFG_KEY);
-        if (raw) { cfg = Object.assign(cfg, JSON.parse(raw)); return; }
+        if (raw) {
+          cfg = Object.assign(cfg, JSON.parse(raw));
+          // 以前の既定（grok-4.7）は遅いので、速いモデルに置き換える
+          if (cfg.models && cfg.models.xai === 'grok-4.7') cfg.models.xai = 'grok-4.3';
+          return;
+        }
       } catch (e) { /* 保存先が使えない環境 */ }
     }
   }
@@ -100,39 +105,88 @@ const Chat = (() => {
     const key = cfg.keys[p];
     const model = (cfg.models[p] || PROVIDERS[p].model).trim();
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 40000);
+    const timer = setTimeout(() => ctrl.abort(), 60000);
     if (opts.signal) opts.signal.addEventListener('abort', () => ctrl.abort());
+    const fast = cfg.fast !== false;   // 速さ優先（考え込む時間を短くする）
     try {
-      let res, data;
       if (p === 'anthropic') {
-        res = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST', signal: ctrl.signal,
-          headers: {
-            'content-type': 'application/json', 'x-api-key': key,
-            'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true',
-          },
-          body: JSON.stringify({ model, max_tokens: 500, messages: [{ role: 'user', content: prompt }] }),
-        });
-        data = await res.json().catch(() => ({}));
-        if (!res.ok) throw { code: 'api_error', status: res.status, message: (data.error && data.error.message) || res.statusText };
-        return (data.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
+        return await streamCall('https://api.anthropic.com/v1/messages', {
+          'content-type': 'application/json', 'x-api-key': key,
+          'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true',
+        }, { model, max_tokens: 400, stream: true, messages: [{ role: 'user', content: prompt }] },
+        ev => (ev.type === 'content_block_delta' && ev.delta && ev.delta.text) || '', ctrl.signal, opts.onText);
       }
       const url = p === 'openai' ? 'https://api.openai.com/v1/chat/completions' : 'https://api.x.ai/v1/chat/completions';
-      res = await fetch(url, {
-        method: 'POST', signal: ctrl.signal,
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-        body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }] }),
-      });
-      data = await res.json().catch(() => ({}));
-      if (!res.ok) throw { code: 'api_error', status: res.status, message: (data.error && (data.error.message || data.error)) || res.statusText };
-      const msg = data.choices && data.choices[0] && data.choices[0].message;
-      return (msg && msg.content) || '';
+      const headers = { 'content-type': 'application/json', authorization: `Bearer ${key}` };
+      const body = { model, stream: true, messages: [{ role: 'user', content: prompt }] };
+      // 考えるモデルは「考える量」を最小にすると返事が早くなる。
+      // モデルによって受け付ける値が違うので、断られたら次の値で試し、最後は指定なしで送る
+      const efforts = fast ? (p === 'openai' ? ['minimal', 'none', 'low'] : ['none', 'low']) : [];
+      const pickText = ev => (ev.choices && ev.choices[0] && ev.choices[0].delta && ev.choices[0].delta.content) || '';
+      const known = cfg.effortOk && cfg.effortOk[`${p}:${model}`];
+      const tries = known !== undefined ? [known] : [...efforts, null];
+      let lastErr = null;
+      for (const eff of tries) {
+        if (eff) body.reasoning_effort = eff; else delete body.reasoning_effort;
+        try {
+          const out = await streamCall(url, headers, body, pickText, ctrl.signal, opts.onText);
+          cfg.effortOk = cfg.effortOk || {};
+          if (cfg.effortOk[`${p}:${model}`] !== eff) { cfg.effortOk[`${p}:${model}`] = eff; saveCfg(); }
+          return out;
+        } catch (e) {
+          lastErr = e;
+          if (!(e && e.status === 400 && /reason|effort/i.test(String(e.message)))) throw e;
+        }
+      }
+      throw lastErr;
     } catch (e) {
       if (e && e.code) throw e;
       throw { code: 'network', message: e && e.name === 'AbortError' ? '時間切れ' : 'つながらない（ブラウザからの接続が許可されていない可能性）' };
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  // 返事を少しずつ受け取り（ストリーミング）、届いた分から画面に出す
+  async function streamCall(url, headers, body, pickText, signal, onText) {
+    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const err = data.error;
+      throw { code: 'api_error', status: res.status, message: (err && (err.message || err)) || res.statusText };
+    }
+    let text = '';
+    const type = res.headers.get('content-type') || '';
+    if (!res.body || !type.includes('event-stream')) {
+      // ストリーミングに対応していない時は、まとめて受け取る
+      const data = await res.json().catch(() => ({}));
+      text = (data.content || []).filter(c => c.type === 'text').map(c => c.text).join('')
+        || (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+      if (onText) onText({ text, delta: text });
+      return text;
+    }
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+        let ev;
+        try { ev = JSON.parse(payload); } catch (e) { continue; }
+        if (ev.type === 'error' || (ev.error && !ev.choices)) throw { code: 'api_error', message: (ev.error && ev.error.message) || 'error' };
+        const d = pickText(ev);
+        if (d) { text += d; if (onText) onText({ text, delta: d }); }
+      }
+    }
+    return text;
   }
 
   function errText(e) {
@@ -172,6 +226,7 @@ const Chat = (() => {
         </label>
         <label>モデル名<input id="ai-model" value="${esc(cfg.models[prov] || ext.model)}" spellcheck="false"></label>
         <label class="check"><input id="ai-remember" type="checkbox" ${cfg.remember ? 'checked' : ''}> このブラウザにキーを覚えさせる（外すと、タブを閉じた時に消えます）</label>
+        ${prov === 'openai' || prov === 'xai' ? `<label class="check"><input id="ai-fast" type="checkbox" ${cfg.fast !== false ? 'checked' : ''}> 速さ優先（考え込む時間を最小にする）</label>` : ''}
         <div class="warn">
           ・キーはこの端末のブラウザにだけ保存し、選んだAI会社（${ext.site}）以外には送りません。<br>
           ・料金はキーの持ち主に請求されます。キーは他人に教えないでください。<br>
@@ -195,6 +250,7 @@ const Chat = (() => {
         const m = $('ai-model').value.trim();
         if (m) cfg.models[prov] = m.slice(0, 80);
         cfg.remember = $('ai-remember').checked;
+        if ($('ai-fast') && $('ai-fast').checked !== (cfg.fast !== false)) { cfg.fast = $('ai-fast').checked; cfg.effortOk = {}; }
       }
       saveCfg();
       updateBadge();
