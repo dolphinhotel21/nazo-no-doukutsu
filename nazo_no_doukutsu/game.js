@@ -3102,9 +3102,10 @@ if ('serviceWorker' in navigator) {
   });
   // 新しい版に切り替わったら、タイトル画面にいる時だけ自動で読み直す（遊んでいる途中は邪魔しない）
   let reloaded = false;
+  const hadController = !!navigator.serviceWorker.controller;   // 初めて開いた時は読み直さない
   try {
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (reloaded || game.screen !== 'title') return;
+      if (reloaded || !hadController || game.screen !== 'title') return;
       reloaded = true;
       location.reload();
     });
