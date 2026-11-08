@@ -60,7 +60,7 @@ const MAP_NAMES = { town: '町', field: 'フィールド', dungeon1: 'B1F', dung
 const JOBS = {
   warrior: { name: '戦士', base: { hp: 40, mp: 4, atk: 13, def: 9 }, growth: { hp: 8, mp: 1, atk: 3, def: 2 }, spells: [], weapon: 'wooden_sword' },
   mage:    { name: '魔法使い', base: { hp: 22, mp: 24, atk: 6, def: 4 }, growth: { hp: 4, mp: 5, atk: 1, def: 1 }, spells: ['fire', 'heal'], weapon: 'thin_staff' },
-  priest:  { name: '僧侶', base: { hp: 30, mp: 18, atk: 8, def: 7 }, growth: { hp: 6, mp: 4, atk: 2, def: 2 }, spells: ['heal', 'protect'], weapon: 'thin_staff' },
+  priest:  { name: '僧侶', base: { hp: 30, mp: 18, atk: 8, def: 7 }, growth: { hp: 6, mp: 4, atk: 2, def: 2 }, spells: ['heal', 'cure', 'protect'], weapon: 'thin_staff' },
   thief:   { name: '盗賊', base: { hp: 32, mp: 8, atk: 11, def: 7 }, growth: { hp: 6, mp: 2, atk: 3, def: 2 }, spells: ['smoke', 'poison'], weapon: 'dagger' },
 };
 
@@ -153,6 +153,7 @@ const SPELLS = {
   heal:     { name: 'ヒール',     type: 'heal',   target: 'ally',  mp: 3, desc: '味方1人のHPを回復', jobs: ['priest', 'mage'], fx: 'heal' },
   fullheal: { name: 'フルヒール', type: 'heal',   target: 'ally',  mp: 8, desc: '味方1人のHPを大回復', jobs: ['priest'], fx: 'heal' },
   healall:  { name: 'ヒールオール', type: 'heal', target: 'party', mp: 10, desc: '味方全員のHPを回復', jobs: ['priest'], fx: 'heal' },
+  cure:     { name: 'キュア',     type: 'cure',   target: 'ally',  mp: 2, desc: '味方1人の毒を治す', jobs: ['priest', 'mage'], fx: 'heal' },
   revive:   { name: 'リザレク',   type: 'revive', target: 'dead',  mp: 12, desc: '倒れた仲間を復活', jobs: ['priest'], fx: 'holy' },
   protect:  { name: 'プロテクト', type: 'buff',   target: 'ally',  mp: 4, desc: '味方1人の被ダメージ半減', jobs: ['priest'], fx: 'buff' },
   poison:   { name: 'ポイズン',   type: 'debuff', target: 'enemy', mp: 3, desc: '敵1体を毒にする', jobs: ['thief', 'mage'], fx: 'poison' },
@@ -162,7 +163,7 @@ const SPELLS = {
   warp:     { name: 'テレポ',     type: 'warp',   target: 'none',  mp: 10, desc: '町か、行ったことのある階へ飛ぶ（移動中のみ）', jobs: ['mage', 'priest'], fx: 'holy' },
 };
 const MAGIC_SHOP_LIST = [
-  { id: 'guide', price: 100 }, { id: 'exit', price: 150 }, { id: 'warp', price: 400 },
+  { id: 'cure', price: 50 }, { id: 'guide', price: 100 }, { id: 'exit', price: 150 }, { id: 'warp', price: 400 },
   { id: 'poison', price: 120 }, { id: 'smoke', price: 80 }, { id: 'holy', price: 250 },
   { id: 'blizzard', price: 250 }, { id: 'fullheal', price: 400 }, { id: 'revive', price: 500 },
   { id: 'thunder', price: 650 }, { id: 'healall', price: 700 },
@@ -240,7 +241,7 @@ const CONSUMABLES = {
   warpstone:  { name: '転移の石', effect: 'warp',     power: 0,   price: 160, sell: 80, desc: '町か、行ったことのある階へ飛ぶ（移動中のみ）' },
 };
 const ITEM_SHOP_LIST = ['herb', 'super_herb', 'mega_herb', 'ether', 'antidote', 'leaf', 'holy_water', 'lantern', 'thread', 'warpstone'];
-const FIELD_SPELL_TYPES = ['heal', 'revive', 'exit', 'warp', 'guide'];
+const FIELD_SPELL_TYPES = ['heal', 'cure', 'revive', 'exit', 'warp', 'guide'];
 const FIELD_ONLY = ['exit', 'warp', 'guide'];
 
 // 敵データ（type は戦闘グラフィックの種類）
@@ -1303,6 +1304,10 @@ function autoChoose(ai) {
     }
   }
 
+  // 2.5) 毒の仲間を治す（危ない仲間がいない時）
+  const poisoned = members.find(o => o.m.poisoned);
+  if (poisoned && canCast(m, 'cure') && (!worst || worst.r >= danger)) return { action: { type: 'spell', sid: 'cure' }, target: poisoned.i };
+
   // 3) 竜戦では先頭に光の盾
   if (bs.boss && canCast(m, 'protect') && !bs.protect.has(0) && game.party[0].hp > 0 && m.mp >= getMaxMp(m) * 0.5) {
     return { action: { type: 'spell', sid: 'protect' }, target: 0 };
@@ -1374,6 +1379,10 @@ function autoPick(kind) {
     list.sort((a, b) => a.e.hp - b.e.hp);
     return list[0] ? list[0].i : 0;
   }
+  if (kind === 'poisoned') {
+    const p = aliveMembers().find(o => o.m.poisoned);
+    return p ? p.i : 0;
+  }
   if (kind === 'dead') {
     const d = game.party.map((m, i) => ({ m, i })).filter(o => o.m.hp <= 0);
     return d.length ? d[0].i : -1;
@@ -1387,6 +1396,7 @@ function requestTarget(action, kind) {
   const bs = battleState;
   const choices = kind === 'enemy' ? aliveEnemies().map(o => o.i)
     : kind === 'dead' ? game.party.map((m, i) => i).filter(i => game.party[i].hp <= 0)
+    : kind === 'poisoned' ? aliveMembers().filter(o => o.m.poisoned).map(o => o.i)
     : aliveMembers().map(o => o.i);
   if (!choices.length) { addBattleLog('対象がいない！', '#888'); return; }
   if (autoTarget || choices.length === 1) { runAction(action, choices.length === 1 ? choices[0] : autoPick(kind)); return; }
@@ -1433,10 +1443,12 @@ function openMagicSubMenu() {
     const b = document.createElement('button');
     b.className = 'battle-btn';
     b.textContent = `${sp.name} (MP${sp.mp}) ${sp.desc}`;
-    b.disabled = m.mp < sp.mp || (sp.target === 'dead' && !game.party.some(x => x.hp <= 0)) || FIELD_ONLY.includes(sp.type);
+    b.disabled = m.mp < sp.mp || (sp.target === 'dead' && !game.party.some(x => x.hp <= 0)) || FIELD_ONLY.includes(sp.type)
+      || (sp.type === 'cure' && !game.party.some(x => x.hp > 0 && x.poisoned));
     b.addEventListener('click', () => {
       if (!canAct()) return;
       if (sp.target === 'enemy') requestTarget({ type: 'spell', sid }, 'enemy');
+      else if (sp.type === 'cure') requestTarget({ type: 'spell', sid }, 'poisoned');
       else if (sp.target === 'ally') requestTarget({ type: 'spell', sid }, 'ally');
       else if (sp.target === 'dead') requestTarget({ type: 'spell', sid }, 'dead');
       else runAction({ type: 'spell', sid }, -1);
@@ -1593,6 +1605,15 @@ function runAction(action, target) {
         const amt = healMember(target, spellPower(action.sid, m));
         addBattleLog(`${game.party[target].name}のHPが${amt}回復した！`, '#0f0');
       }
+      finishAction();
+      return;
+    }
+    if (sp.type === 'cure') {
+      const t = game.party[target];
+      Sound.sfx('heal');
+      Fx.aura('heal', pmEl(target));
+      addBattleLog(t.poisoned ? `${t.name}の毒が消えた！` : `${t.name}は毒を受けていなかった。`, '#0f0');
+      t.poisoned = false;
       finishAction();
       return;
     }
@@ -2510,12 +2531,13 @@ function openFieldMagic(casterIdx, sid) {
       openFieldMagic(casterIdx);
       return;
     }
-    const filter = sp.target === 'dead' ? t => t.hp <= 0 : t => t.hp > 0;
+    const filter = sp.target === 'dead' ? t => t.hp <= 0 : sp.type === 'cure' ? t => t.hp > 0 && t.poisoned : t => t.hp > 0;
     openShop(`[ ${sp.name}を誰に？ ]`, targetButtons('data-cast-to', filter));
     document.querySelectorAll('[data-cast-to]').forEach(b => b.addEventListener('click', () => {
       const t = game.party[parseInt(b.dataset.castTo, 10)];
       m.mp -= sp.mp;
       if (sp.type === 'revive') { t.hp = Math.ceil(t.maxHp / 2); addMessage(`${t.name}が生き返った！`, '#ffd'); Sound.sfx('holy'); }
+      else if (sp.type === 'cure') { addMessage(t.poisoned ? `${m.name}の${sp.name}！ ${t.name}の毒が消えた。` : `${t.name}は毒を受けていない。`, '#0f0'); t.poisoned = false; Sound.sfx('heal'); }
       else { const amt = Math.min(t.maxHp - t.hp, spellPower(sid, m)); t.hp += amt; Sound.sfx('heal'); addMessage(`${m.name}の${sp.name}！ ${t.name}のHPが${amt}回復。`, '#0f0'); }
       openFieldMagic(casterIdx);
     }));
@@ -2528,6 +2550,7 @@ function openFieldMagic(casterIdx, sid) {
   for (const s of m.spells.filter(s => FIELD_SPELL_TYPES.includes(SPELLS[s].type))) {
     const sp = SPELLS[s];
     const dis = m.mp < sp.mp || (sp.type === 'revive' && !game.party.some(t => t.hp <= 0))
+      || (sp.type === 'cure' && !game.party.some(t => t.hp > 0 && t.poisoned))
       || (sp.type === 'exit' && !inDungeon()) || (sp.type === 'warp' && !warpDestinations().length)
       || (sp.type === 'guide' && !guideTargets().some(t => t.ok));
     rows += `<div class="shop-item-row ${dis ? 'disabled' : ''}"><span class="shop-item-name">${sp.name}<small>MP${sp.mp} ${sp.desc}</small></span>

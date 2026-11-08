@@ -313,7 +313,7 @@ button { font-family: inherit; }
 .proj { position: absolute; transform: translate(-50%, -50%); border-radius: 50%; }
 .proj-fire { width: 20px; height: 20px; background: radial-gradient(circle, #fff 0 20%, #ffd040 35%, #ff6a00 65%, rgba(255, 60, 0, 0) 72%); box-shadow: 0 0 16px #ff6a00, -14px 0 14px rgba(255, 120, 0, 0.5); }
 .proj-breath { width: 30px; height: 30px; background: radial-gradient(circle, #fff 0 15%, #ffcc33 35%, #ff4400 65%, rgba(255, 40, 0, 0) 72%); box-shadow: 0 0 22px #ff4400; }
-.proj-ice { width: 14px; height: 14px; border-radius: 2px; background: linear-gradient(135deg, #fff, #8af0ff 50%, #2aa8e8); box-shadow: 0 0 12px #6ad8ff; rotate: 45deg; }
+.proj-ice { width: 16px; height: 16px; border-radius: 0; background: linear-gradient(135deg, #fff, #8af0ff 50%, #2aa8e8); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); filter: drop-shadow(0 0 6px #6ad8ff); }
 .proj-thunder { width: 40px; height: 8px; border-radius: 3px; background: #ffffa0; box-shadow: 0 0 14px #ffff40, 0 0 30px #fff; }
 .proj-holy { width: 22px; height: 22px; background: radial-gradient(circle, #fff 0 35%, #fff8c0 55%, rgba(255, 255, 200, 0) 72%); box-shadow: 0 0 20px #fff; }
 .proj-poison { width: 16px; height: 16px; background: radial-gradient(circle at 35% 35%, #e0a0ff, #8a2ae0 60%, #4a0a8a); box-shadow: 0 0 10px #a040ff; }
