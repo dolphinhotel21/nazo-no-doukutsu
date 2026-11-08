@@ -1,384 +1,180 @@
 // =============================
+// 謎の洞窟 〜 姫と伝説の秘宝 〜
+// =============================
+
+// ストレージ（使えない環境ではメモリに退避）
+const store = (() => {
+  const mem = {};
+  return {
+    getItem(k) { try { return localStorage.getItem(k); } catch (e) { return k in mem ? mem[k] : null; } },
+    setItem(k, v) { try { localStorage.setItem(k, v); } catch (e) { mem[k] = String(v); } },
+    removeItem(k) { try { localStorage.removeItem(k); } catch (e) { delete mem[k]; } },
+  };
+})();
+
+// =============================
 // 定数定義
 // =============================
 const CONFIG = {
-  MAP_SIZE: 25,           // マップの1辺タイル数
-  VIEW_SIZE: 15,          // 画面表示タイル数
-  TILE_SIZE: 24,          // タイルのピクセルサイズ
-  FOG_RADIUS: 3,          // 視野半径
-  ENC_RATE_B1: 0.15,      // B1エンカウント率
-  ENC_RATE_B2: 0.20,      // B2エンカウント率
-  ENC_RATE_B3: 0.25,      // B3エンカウント率
-  ESCAPE_RATE_NORMAL: 0.40, // 通常逃走成功率
-  ESCAPE_RATE_THIEF: 0.70,  // 盗賊逃走成功率
-  MAX_ITEMS: 20,          // アイテム最大所持数
-  MAX_LV: 20,             // レベル上限
-  SAVE_KEY: 'nazo_no_doukutsu_save',      // 旧互換キー（移行用）
-  SAVE_SLOT_KEY: 'nazo_no_doukutsu_slot_', // スロットキーのプレフィックス
-  SAVE_SLOTS: 3,                           // セーブスロット数
+  MAP_SIZE: 25,
+  VIEW_SIZE: 15,
+  FOG_RADIUS: 3,
+  ESCAPE_RATE_NORMAL: 0.45,
+  ESCAPE_RATE_THIEF: 0.75,
+  MAX_ITEMS: 20,
+  MAX_LV: 30,
+  SAVE_SLOT_KEY: 'nazo_no_doukutsu_v2_slot_',
+  SOUND_KEY: 'nazo_no_doukutsu_muted',
+  SAVE_SLOTS: 3,
 };
 
-// タイル種別
 const TILE = {
-  WALL: '#', FLOOR: '.', PLAYER: '@',
+  WALL: '#', FLOOR: '.',
   STAIR_DOWN: '>', STAIR_UP: '<',
-  HOUSE: 'H', INN: 'I', MAGIC_SHOP: 'M',
-  WEAPON_SHOP: 'W', ARMOR_SHOP: 'A', ITEM_SHOP: 'T',
-  DUNGEON_ENTRANCE: 'D', BOSS: 'B', TREASURE: '$',
+  HOUSE: 'H', INN: 'I', MAGIC_SHOP: 'M', WEAPON_SHOP: 'W', ARMOR_SHOP: 'A', ITEM_SHOP: 'T',
+  CASTLE: 'K', DUNGEON_ENTRANCE: 'D',
+  TREE: 'Y', WATER: '~', FLOWER: '*',
+  CHEST: 'C', LEGEND_CHEST: 'L', CHEST_OPEN: 'c',
+  SPRING: 'F', SPRING_DRY: 'f',
+  TRAP: '^', TRAP_SEEN: 'x',
+  BOSS: 'B', TREASURE: '$', CELL: 'P',
 };
+const BLOCKING = new Set([TILE.WALL, TILE.TREE, TILE.WATER]);
 
-// 職業定義
+const FLOORS = {
+  dungeon1: { name: 'B1F', no: 1, enc: 0.10, pool: 'b1', bgm: 'dungeon' },
+  dungeon2: { name: 'B2F', no: 2, enc: 0.12, pool: 'b2', bgm: 'dungeon' },
+  dungeon3: { name: 'B3F', no: 3, enc: 0.13, pool: 'b3', bgm: 'dungeon' },
+  dungeon4: { name: 'B4F', no: 4, enc: 0.14, pool: 'b4', bgm: 'deep' },
+  dungeon5: { name: 'B5F', no: 5, enc: 0.15, pool: 'b5', bgm: 'deep' },
+};
+const MAP_ORDER = ['town', 'dungeon1', 'dungeon2', 'dungeon3', 'dungeon4', 'dungeon5'];
+const MAP_NAMES = { town: '町', dungeon1: 'B1F', dungeon2: 'B2F', dungeon3: 'B3F', dungeon4: 'B4F', dungeon5: 'B5F' };
+
+// 職業
 const JOBS = {
-  warrior: {
-    name: '戦士', label: 'warrior',
-    base: { hp: 40, mp: 5, atk: 12, def: 8 },
-    growth: { hp: 8, mp: 1, atk: 3, def: 2 },
-    spells: [],
-    initialWeapon: 'wooden_sword',
-    escapeBonus: 0,
-  },
-  mage: {
-    name: '魔法使い', label: 'mage',
-    base: { hp: 20, mp: 25, atk: 6, def: 3 },
-    growth: { hp: 4, mp: 5, atk: 1, def: 1 },
-    spells: ['fire', 'heal'],
-    initialWeapon: 'thin_staff',
-    escapeBonus: 0,
-  },
-  priest: {
-    name: '僧侶', label: 'priest',
-    base: { hp: 28, mp: 18, atk: 7, def: 6 },
-    growth: { hp: 6, mp: 4, atk: 1, def: 2 },
-    spells: ['heal', 'protect'],
-    initialWeapon: 'thin_staff',
-    escapeBonus: 0,
-  },
-  thief: {
-    name: '盗賊', label: 'thief',
-    base: { hp: 30, mp: 8, atk: 10, def: 6 },
-    growth: { hp: 6, mp: 2, atk: 2, def: 2 },
-    spells: ['smoke', 'poison'],
-    initialWeapon: 'dagger',
-    escapeBonus: 0.30,
-  },
+  warrior: { name: '戦士', base: { hp: 40, mp: 4, atk: 13, def: 9 }, growth: { hp: 8, mp: 1, atk: 3, def: 2 }, spells: [], initialWeapon: 'wooden_sword' },
+  mage:    { name: '魔法使い', base: { hp: 22, mp: 24, atk: 6, def: 4 }, growth: { hp: 4, mp: 5, atk: 1, def: 1 }, spells: ['fire', 'heal'], initialWeapon: 'thin_staff' },
+  priest:  { name: '僧侶', base: { hp: 30, mp: 18, atk: 8, def: 7 }, growth: { hp: 6, mp: 4, atk: 2, def: 2 }, spells: ['heal', 'protect'], initialWeapon: 'thin_staff' },
+  thief:   { name: '盗賊', base: { hp: 32, mp: 8, atk: 11, def: 7 }, growth: { hp: 6, mp: 2, atk: 3, def: 2 }, spells: ['smoke', 'poison'], initialWeapon: 'dagger' },
 };
 
-// 魔法定義
+// 魔法（威力はレベルで伸びる）
 const SPELLS = {
-  fire:      { name: 'ファイア',   type: 'attack',  mp: 4,  desc: '敵1体に中ダメージ（DEF無視）', jobs: ['mage', 'thief'] },
-  blizzard:  { name: 'ブリザード', type: 'attack',  mp: 4,  desc: '敵1体に中ダメージ', jobs: ['mage'] },
-  thunder:   { name: 'サンダー',   type: 'attack',  mp: 6,  desc: '敵1体に高ダメージ', jobs: ['mage'] },
-  heal:      { name: 'ヒール',     type: 'heal',    mp: 3,  desc: 'HPを小回復（+20〜30）', jobs: ['priest', 'mage'] },
-  fullheal:  { name: 'フルヒール', type: 'heal',    mp: 8,  desc: 'HPを大回復（+60〜80）', jobs: ['priest'] },
-  protect:   { name: 'プロテクト', type: 'buff',    mp: 4,  desc: '次の被ダメージを50%軽減', jobs: ['priest'] },
-  poison:    { name: 'ポイズン',   type: 'debuff',  mp: 3,  desc: '敵に毒を与える（毎ターンダメージ）', jobs: ['thief', 'mage'] },
-  smoke:     { name: 'スモーク',   type: 'escape',  mp: 2,  desc: '逃走成功率100%', jobs: ['thief'] },
+  fire:     { name: 'ファイア',   type: 'attack', mp: 4,  desc: '炎で攻撃（防御無視）', jobs: ['mage', 'thief'], fx: 'fire' },
+  blizzard: { name: 'ブリザード', type: 'attack', mp: 5,  desc: '氷で大ダメージ', jobs: ['mage'], fx: 'ice' },
+  thunder:  { name: 'サンダー',   type: 'attack', mp: 8,  desc: '雷で特大ダメージ', jobs: ['mage'], fx: 'thunder' },
+  holy:     { name: 'ホーリー',   type: 'attack', mp: 5,  desc: '聖なる光（不死に2倍）', jobs: ['priest'], fx: 'holy' },
+  heal:     { name: 'ヒール',     type: 'heal',   mp: 3,  desc: 'HPを回復', jobs: ['priest', 'mage'], fx: 'heal' },
+  fullheal: { name: 'フルヒール', type: 'heal',   mp: 8,  desc: 'HPを大回復', jobs: ['priest'], fx: 'heal' },
+  protect:  { name: 'プロテクト', type: 'buff',   mp: 4,  desc: '次の被ダメージ半減', jobs: ['priest'], fx: 'buff' },
+  poison:   { name: 'ポイズン',   type: 'debuff', mp: 3,  desc: '敵を毒にする', jobs: ['thief', 'mage'], fx: 'poison' },
+  smoke:    { name: 'スモーク',   type: 'escape', mp: 2,  desc: '必ず逃げる（ボス不可）', jobs: ['thief'], fx: 'run' },
 };
-
-// 魔法ショップ販売リスト
 const MAGIC_SHOP_LIST = [
-  { id: 'blizzard', price: 200 },
-  { id: 'thunder',  price: 400 },
-  { id: 'fullheal', price: 350 },
-  { id: 'poison',   price: 150 },
-  { id: 'smoke',    price: 100 },
+  { id: 'poison', price: 120 }, { id: 'smoke', price: 80 }, { id: 'holy', price: 250 },
+  { id: 'blizzard', price: 250 }, { id: 'fullheal', price: 400 }, { id: 'thunder', price: 600 },
 ];
 
-// 武器定義
 const WEAPONS = {
-  wooden_sword: { name: '木の剣',       atk: 3,  price: 0,   sell: 0,   jobs: ['warrior','thief'],               magicBonus: 0, escapeBonus: 0 },
-  dagger:       { name: '短剣',         atk: 2,  price: 0,   sell: 0,   jobs: ['warrior','mage','priest','thief'], magicBonus: 0, escapeBonus: 0 },
-  thin_staff:   { name: '細身の杖',     atk: 1,  price: 0,   sell: 0,   jobs: ['warrior','mage','priest','thief'], magicBonus: 0, escapeBonus: 0 },
-  iron_sword:   { name: '鉄の剣',       atk: 7,  price: 150, sell: 75,  jobs: ['warrior','thief'],               magicBonus: 0, escapeBonus: 0 },
-  magic_staff:  { name: '魔法の杖',     atk: 4,  price: 300, sell: 150, jobs: ['mage','priest'],                  magicBonus: 0.30, escapeBonus: 0 },
-  mithril_sword:{ name: 'ミスリルの剣', atk: 15, price: 800, sell: 400, jobs: ['warrior'],                       magicBonus: 0, escapeBonus: 0 },
-  ninja_blade:  { name: '忍者刀',       atk: 10, price: 500, sell: 250, jobs: ['thief'],                         magicBonus: 0, escapeBonus: 0.20 },
+  wooden_sword:  { name: '木の剣',       atk: 3,  price: 0,   sell: 0,   jobs: ['warrior', 'thief'], magicBonus: 0, escapeBonus: 0 },
+  dagger:        { name: '短剣',         atk: 2,  price: 0,   sell: 0,   jobs: ['warrior', 'mage', 'priest', 'thief'], magicBonus: 0, escapeBonus: 0 },
+  thin_staff:    { name: '細身の杖',     atk: 1,  price: 0,   sell: 0,   jobs: ['warrior', 'mage', 'priest', 'thief'], magicBonus: 0, escapeBonus: 0 },
+  iron_sword:    { name: '鉄の剣',       atk: 8,  price: 150, sell: 75,  jobs: ['warrior', 'thief'], magicBonus: 0, escapeBonus: 0 },
+  mace:          { name: 'メイス',       atk: 7,  price: 180, sell: 90,  jobs: ['priest', 'warrior'], magicBonus: 0, escapeBonus: 0 },
+  magic_staff:   { name: '魔法の杖',     atk: 4,  price: 300, sell: 150, jobs: ['mage', 'priest'], magicBonus: 0.3, escapeBonus: 0 },
+  ninja_blade:   { name: '忍者刀',       atk: 13, price: 500, sell: 250, jobs: ['thief'], magicBonus: 0, escapeBonus: 0.15 },
+  mithril_sword: { name: 'ミスリルの剣', atk: 17, price: 900, sell: 450, jobs: ['warrior'], magicBonus: 0, escapeBonus: 0 },
+  // 伝説の武器（B4Fの宝箱から）
+  hero_sword:    { name: '勇者の剣',     atk: 28, price: 0, sell: 300, jobs: ['warrior'], magicBonus: 0, escapeBonus: 0, legend: true },
+  sage_staff:    { name: '賢者の杖',     atk: 9,  price: 0, sell: 300, jobs: ['mage'], magicBonus: 0.7, escapeBonus: 0, legend: true },
+  holy_staff:    { name: '聖者の杖',     atk: 14, price: 0, sell: 300, jobs: ['priest'], magicBonus: 0.6, escapeBonus: 0, legend: true },
+  wind_blade:    { name: '風魔の小太刀', atk: 22, price: 0, sell: 300, jobs: ['thief'], magicBonus: 0, escapeBonus: 0.3, legend: true },
 };
+const LEGEND_WEAPON = { warrior: 'hero_sword', mage: 'sage_staff', priest: 'holy_staff', thief: 'wind_blade' };
+const WEAPON_SHOP_LIST = ['iron_sword', 'mace', 'magic_staff', 'ninja_blade', 'mithril_sword'];
 
-// 武器屋販売リスト
-const WEAPON_SHOP_LIST = ['iron_sword', 'magic_staff', 'mithril_sword', 'ninja_blade'];
-
-// 防具定義
 const ARMORS = {
-  cloth:          { name: '布の服',       def: 1,  price: 0,    sell: 0,   jobs: ['warrior','mage','priest','thief'], mpBonus: 0, escapeBonus: 0 },
-  leather_armor:  { name: '革の鎧',       def: 4,  price: 100,  sell: 50,  jobs: ['warrior','mage','priest','thief'], mpBonus: 0, escapeBonus: 0 },
-  iron_armor:     { name: '鉄の鎧',       def: 8,  price: 300,  sell: 150, jobs: ['warrior'],                       mpBonus: 0, escapeBonus: 0 },
-  magic_robe:     { name: '魔法のローブ', def: 3,  price: 250,  sell: 125, jobs: ['mage','priest'],                  mpBonus: 10, escapeBonus: 0 },
-  mithril_armor:  { name: 'ミスリル鎧',   def: 16, price: 1000, sell: 500, jobs: ['warrior'],                       mpBonus: 0, escapeBonus: 0 },
-  shadow_armor:   { name: 'シャドウアーマー', def: 8, price: 450, sell: 225, jobs: ['thief'],                      mpBonus: 0, escapeBonus: 0.10 },
+  cloth:         { name: '布の服',       def: 1,  price: 0,    sell: 0,   jobs: ['warrior', 'mage', 'priest', 'thief'], mpBonus: 0, escapeBonus: 0 },
+  leather_armor: { name: '革の鎧',       def: 4,  price: 100,  sell: 50,  jobs: ['warrior', 'mage', 'priest', 'thief'], mpBonus: 0, escapeBonus: 0 },
+  magic_robe:    { name: '魔法のローブ', def: 4,  price: 250,  sell: 125, jobs: ['mage', 'priest'], mpBonus: 10, escapeBonus: 0 },
+  iron_armor:    { name: '鉄の鎧',       def: 9,  price: 320,  sell: 160, jobs: ['warrior', 'priest'], mpBonus: 0, escapeBonus: 0 },
+  shadow_armor:  { name: '影の装束',     def: 9,  price: 450,  sell: 225, jobs: ['thief'], mpBonus: 0, escapeBonus: 0.10 },
+  holy_robe:     { name: '聖なるローブ', def: 10, price: 750,  sell: 375, jobs: ['mage', 'priest'], mpBonus: 15, escapeBonus: 0 },
+  mithril_armor: { name: 'ミスリル鎧',   def: 17, price: 1000, sell: 500, jobs: ['warrior'], mpBonus: 0, escapeBonus: 0 },
 };
+const ARMOR_SHOP_LIST = ['leather_armor', 'magic_robe', 'iron_armor', 'shadow_armor', 'holy_robe', 'mithril_armor'];
 
-// 防具屋販売リスト
-const ARMOR_SHOP_LIST = ['leather_armor', 'iron_armor', 'magic_robe', 'mithril_armor', 'shadow_armor'];
-
-// 消耗品定義
 const CONSUMABLES = {
-  herb:         { name: '薬草',     effect: 'heal_20',   price: 10,  sell: 5,  desc: 'HPを20回復' },
-  super_herb:   { name: '上薬草',   effect: 'heal_50',   price: 30,  sell: 15, desc: 'HPを50回復' },
-  holy_water:   { name: '聖水',     effect: 'holy',      price: 50,  sell: 25, desc: 'アンデッド系に大ダメージ' },
-  antidote:     { name: '毒消し草', effect: 'antidote',  price: 15,  sell: 7,  desc: '毒を治癒' },
-  ether:        { name: 'エーテル', effect: 'mp_10',     price: 40,  sell: 20, desc: 'MPを10回復' },
+  herb:       { name: '薬草',     effect: 'heal',     power: 30,  price: 10,  sell: 5,  desc: 'HPを30回復' },
+  super_herb: { name: '上薬草',   effect: 'heal',     power: 70,  price: 35,  sell: 17, desc: 'HPを70回復' },
+  mega_herb:  { name: '特薬草',   effect: 'heal',     power: 150, price: 110, sell: 55, desc: 'HPを150回復' },
+  ether:      { name: 'エーテル', effect: 'mp',       power: 15,  price: 45,  sell: 22, desc: 'MPを15回復' },
+  antidote:   { name: '毒消し草', effect: 'antidote', power: 0,   price: 12,  sell: 6,  desc: '毒を治す' },
+  holy_water: { name: '聖水',     effect: 'holy',     power: 0,   price: 60,  sell: 30, desc: '不死の敵に大ダメージ' },
 };
+const ITEM_SHOP_LIST = ['herb', 'super_herb', 'mega_herb', 'ether', 'antidote', 'holy_water'];
 
-// 道具屋販売リスト
-const ITEM_SHOP_LIST = ['herb', 'super_herb', 'holy_water', 'antidote', 'ether'];
-
-// 敵データ
+// 敵データ（type は戦闘グラフィックの種類）
 const ENEMIES = {
   b1: [
-    { name: 'スライム',   hp: 8,  atk: 4,  def: 1,  exp: 5,  gold: 3,  type: 'slime',    special: null },
-    { name: 'コウモリ',   hp: 10, atk: 5,  def: 2,  exp: 7,  gold: 5,  type: 'bat',      special: null },
-    { name: 'ゴブリン',   hp: 15, atk: 7,  def: 3,  exp: 12, gold: 8,  type: 'goblin',   special: null },
+    { name: 'スライム',   hp: 10, atk: 7,  def: 1,  exp: 10, gold: 4,  type: 'slime' },
+    { name: 'コウモリ',   hp: 12, atk: 8,  def: 2,  exp: 13, gold: 5,  type: 'bat' },
+    { name: 'ゴブリン',   hp: 18, atk: 10, def: 3,  exp: 20, gold: 9,  type: 'goblin' },
   ],
   b2: [
-    { name: 'ゾンビ',     hp: 25, atk: 10, def: 4,  exp: 20, gold: 15, type: 'undead',   special: null },
-    { name: '毒ヘビ',     hp: 20, atk: 12, def: 3,  exp: 18, gold: 12, type: 'snake',    special: 'poison' },
-    { name: 'オーク',     hp: 35, atk: 14, def: 6,  exp: 30, gold: 20, type: 'orc',      special: null },
+    { name: 'ゾンビ',     hp: 34, atk: 17, def: 5,  exp: 30, gold: 14, type: 'zombie', undead: true },
+    { name: '毒ヘビ',     hp: 28, atk: 19, def: 4,  exp: 28, gold: 12, type: 'snake', special: 'poison' },
+    { name: 'オーク',     hp: 45, atk: 21, def: 8,  exp: 40, gold: 22, type: 'orc' },
   ],
   b3: [
-    { name: 'ダークウォリアー', hp: 50, atk: 18, def: 10, exp: 50, gold: 40, type: 'dark',  special: null },
-    { name: '骸骨騎士',   hp: 45, atk: 20, def: 8,  exp: 45, gold: 35, type: 'undead',   special: null },
-    { name: 'ケルベロス', hp: 60, atk: 22, def: 8,  exp: 60, gold: 50, type: 'beast',    special: null },
+    { name: '骸骨騎士',   hp: 60, atk: 29, def: 11, exp: 60, gold: 30, type: 'skeleton', undead: true },
+    { name: 'ガーゴイル', hp: 56, atk: 31, def: 15, exp: 64, gold: 32, type: 'gargoyle' },
+    { name: '闇の魔術師', hp: 46, atk: 27, def: 7,  exp: 68, gold: 42, type: 'darkmage', special: 'spell' },
   ],
-  boss: { name: '暗黒竜ヴォルガン', hp: 200, atk: 30, def: 15, exp: 500, gold: 300, type: 'boss', special: 'breath' },
+  b4: [
+    { name: 'ダークナイト', hp: 85,  atk: 41, def: 17, exp: 110, gold: 55, type: 'dark' },
+    { name: 'ケルベロス',   hp: 95,  atk: 45, def: 12, exp: 120, gold: 60, type: 'beast' },
+    { name: 'ミノタウロス', hp: 110, atk: 48, def: 14, exp: 140, gold: 72, type: 'minotaur' },
+  ],
+  b5: [
+    { name: 'リッチ',     hp: 100, atk: 51, def: 14, exp: 180, gold: 90,  type: 'lich', undead: true, special: 'spell' },
+    { name: 'ワイバーン', hp: 120, atk: 55, def: 16, exp: 190, gold: 90,  type: 'wyvern' },
+    { name: 'アークデーモン', hp: 140, atk: 59, def: 18, exp: 220, gold: 110, type: 'demon' },
+  ],
+  golem: { name: '門番ゴーレム', hp: 190, atk: 38, def: 18, exp: 320, gold: 150, type: 'golem' },
+  boss:  { name: '暗黒竜ヴォルガン', hp: 340, atk: 56, def: 22, exp: 1200, gold: 600, type: 'boss', special: 'breath' },
 };
 
 // =============================
 // ゲーム状態
 // =============================
-let game = {
-  screen: 'title',       // 現在の画面
-  player: null,          // プレイヤーデータ
-  maps: {},              // マップデータ
-  currentMap: 'town',    // 現在のマップID
-  explored: {},          // 探索済みマス { mapId: Set<"x,y"> }
-  flags: {
-    bossDefeated: false,
-    hasTreasure: false,
-    bossEncountered: false,
-  },
-  messages: ['', '', ''],   // メッセージログ（最新3件）
-  inputEnabled: true,    // キー入力受け付け
-  battle: null,          // バトル状態
-};
+let game = newGameState();
+
+function newGameState() {
+  return {
+    screen: 'title',
+    player: null,
+    maps: {},
+    currentMap: 'town',
+    explored: {},
+    flags: { golemDefeated: false, bossDefeated: false, hasTreasure: false, princessRescued: false, legendTaken: false },
+    stats: { steps: 0, kills: 0 },
+    follower: null,          // 姫の位置 {x, y}
+    messages: ['', '', ''],
+    inputEnabled: true,
+  };
+}
 
 // =============================
 // ユーティリティ
 // =============================
-function rand(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+function $(id) { return document.getElementById(id); }
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
-
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
-}
-
-function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById('screen-' + id).classList.add('active');
-  game.screen = id;
-}
-
-// メッセージ追加
-function addMessage(text, color) {
-  game.messages.shift();
-  game.messages.push(text);
-  for (let i = 0; i < 3; i++) {
-    const el = document.getElementById('msg-' + i);
-    el.textContent = game.messages[i];
-    el.style.color = color && i === 2 ? color : '';
-  }
-}
-
-// HPバーの色を更新
-function hpColor(current, max) {
-  const ratio = current / max;
-  if (ratio > 0.5) return '#00cc33';
-  if (ratio > 0.25) return '#ffaa00';
-  return '#ff3333';
-}
-
-// =============================
-// プレイヤー作成
-// =============================
-function createPlayer(name, jobKey) {
-  const job = JOBS[jobKey];
-  const weaponKey = job.initialWeapon;
-  const weapon = WEAPONS[weaponKey];
-  const armor = ARMORS['cloth'];
-
-  return {
-    name,
-    job: jobKey,
-    lv: 1,
-    exp: 0,
-    expNext: 100,
-    hp: job.base.hp,
-    maxHp: job.base.hp,
-    mp: job.base.mp,
-    maxMp: job.base.mp,
-    baseAtk: job.base.atk,
-    baseDef: job.base.def,
-    weapon: weaponKey,
-    armor: 'cloth',
-    items: [],          // { id, count }
-    spells: [...job.spells],
-    gold: 100,
-    poisoned: false,    // 毒状態
-    x: 0,
-    y: 0,
-  };
-}
-
-// 実際のATK（装備込み）
-function getAtk(player) {
-  const w = WEAPONS[player.weapon];
-  return player.baseAtk + w.atk;
-}
-
-// 実際のDEF（装備込み）
-function getDef(player) {
-  const a = ARMORS[player.armor];
-  return player.baseDef + a.def;
-}
-
-// 実際のMaxMP（防具ボーナス込み）
-function getMaxMp(player) {
-  const a = ARMORS[player.armor];
-  return player.maxMp + a.mpBonus;
-}
-
-// =============================
-// マップ生成
-// =============================
-
-// 手動定義: 町マップ (25×25)
-function createTownMap() {
-  const S = CONFIG.MAP_SIZE;
-  // 全部壁で初期化
-  const grid = Array.from({ length: S }, () => Array(S).fill(TILE.WALL));
-
-  // 道を開ける（外壁を残して内部を床に）
-  for (let y = 1; y < S - 1; y++) {
-    for (let x = 1; x < S - 1; x++) {
-      grid[y][x] = TILE.FLOOR;
-    }
-  }
-
-  // 建物配置
-  // 家（スタート付近）
-  grid[3][3] = TILE.HOUSE;
-  // 宿屋
-  grid[3][10] = TILE.INN;
-  // 魔法ショップ
-  grid[3][18] = TILE.MAGIC_SHOP;
-  // 武器屋
-  grid[10][5] = TILE.WEAPON_SHOP;
-  // 防具屋
-  grid[10][12] = TILE.ARMOR_SHOP;
-  // 道具屋
-  grid[10][19] = TILE.ITEM_SHOP;
-  // ダンジョン入口（端に配置）
-  grid[22][12] = TILE.DUNGEON_ENTRANCE;
-
-  // プレイヤースタート位置を記録
-  const startX = 4;
-  const startY = 3;
-
-  return { grid, startX, startY, dungeonEntranceX: 12, dungeonEntranceY: 21, id: 'town' };
-}
-
-// プロシージャル迷路生成（再帰バックトラッキング）
-function createDungeonMap(id, hasStairUp, hasStairDown, hasBoss, hasTreasureCell) {
-  const S = CONFIG.MAP_SIZE;
-  const grid = Array.from({ length: S }, () => Array(S).fill(TILE.WALL));
-
-  // 迷路生成（奇数座標を起点に）
-  function carve(x, y) {
-    const dirs = shuffle([[0,-2],[0,2],[-2,0],[2,0]]);
-    for (const [dx, dy] of dirs) {
-      const nx = x + dx;
-      const ny = y + dy;
-      if (nx > 0 && nx < S - 1 && ny > 0 && ny < S - 1 && grid[ny][nx] === TILE.WALL) {
-        grid[ny - dy/2][nx - dx/2] = TILE.FLOOR;
-        grid[ny][nx] = TILE.FLOOR;
-        carve(nx, ny);
-      }
-    }
-  }
-
-  grid[1][1] = TILE.FLOOR;
-  carve(1, 1);
-
-  // 床タイル一覧を取得
-  const floors = [];
-  for (let y = 1; y < S - 1; y++) {
-    for (let x = 1; x < S - 1; x++) {
-      if (grid[y][x] === TILE.FLOOR) floors.push({ x, y });
-    }
-  }
-
-  // スタート位置（入口付近）
-  const startCell = floors[0];
-  const startX = startCell.x;
-  const startY = startCell.y;
-
-  // 遠い位置を取得（ボス・宝箱・階段用）
-  function farFrom(fx, fy, n) {
-    const sorted = [...floors].sort((a, b) => {
-      const da = Math.abs(a.x - fx) + Math.abs(a.y - fy);
-      const db = Math.abs(b.x - fx) + Math.abs(b.y - fy);
-      return db - da;
-    });
-    return sorted.slice(0, n);
-  }
-
-  let used = new Set([`${startX},${startY}`]);
-
-  function placeFar(fx, fy) {
-    const candidates = farFrom(fx, fy, 20);
-    for (const c of candidates) {
-      const key = `${c.x},${c.y}`;
-      if (!used.has(key)) {
-        used.add(key);
-        return c;
-      }
-    }
-    return candidates[0];
-  }
-
-  // 上り階段（前フロアへ戻る）
-  if (hasStairUp) {
-    grid[startY][startX] = TILE.STAIR_UP;
-  }
-
-  // 下り階段
-  let stairDownPos = null;
-  if (hasStairDown) {
-    stairDownPos = placeFar(startX, startY);
-    grid[stairDownPos.y][stairDownPos.x] = TILE.STAIR_DOWN;
-  }
-
-  // ボス（B3最奥）
-  let bossPos = null;
-  if (hasBoss) {
-    const ref = stairDownPos || startCell;
-    bossPos = placeFar(startX, startY);
-    grid[bossPos.y][bossPos.x] = TILE.BOSS;
-  }
-
-  // 宝箱（ボスより奥）
-  let treasurePos = null;
-  if (hasTreasureCell) {
-    const ref = bossPos || startCell;
-    treasurePos = placeFar(startX, startY);
-    grid[treasurePos.y][treasurePos.x] = TILE.TREASURE;
-  }
-
-  return { grid, startX, startY, id, bossPos, treasurePos };
-}
-
-// 配列をシャッフル
 function shuffle(arr) {
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -387,238 +183,280 @@ function shuffle(arr) {
   return arr;
 }
 
-// 全マップ初期化
-function initMaps() {
-  game.maps = {
-    town:    createTownMap(),
-    dungeon1: createDungeonMap('dungeon1', true,  true,  false, false),
-    dungeon2: createDungeonMap('dungeon2', true,  true,  false, false),
-    dungeon3: createDungeonMap('dungeon3', true,  false, true,  true),
-  };
-  game.explored = {
-    town: new Set(),
-    dungeon1: new Set(),
-    dungeon2: new Set(),
-    dungeon3: new Set(),
-  };
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $('screen-' + id).classList.add('active');
+  game.screen = id;
+  if (id === 'game') requestAnimationFrame(() => { fitMap(); renderMap(); });
+}
+
+function addMessage(text, color) {
+  game.messages.shift();
+  game.messages.push(text);
+  for (let i = 0; i < 3; i++) {
+    const el = $('msg-' + i);
+    el.textContent = game.messages[i];
+    el.style.color = color && i === 2 ? color : '';
+  }
+}
+
+function hpColor(current, max) {
+  const r = current / max;
+  if (r > 0.5) return '#00cc33';
+  if (r > 0.25) return '#ffaa00';
+  return '#ff3333';
 }
 
 // =============================
-// プレイヤーCSSピクセルアート
+// プレイヤー
 // =============================
-// 6列×8行のドット絵（2px/ドット）をbox-shadowで描画
-// タイル24pxに対して left:6px, top:4px でセンタリング（12x16px）
-function getPlayerBoxShadow(jobKey) {
-  const skin = '#d4935e';
-  const cfgs = {
-    warrior: { body: '#cc2200', leg: '#881100' }, // 赤マント・戦士
-    mage:    { body: '#1133bb', leg: '#0a1e88' }, // 青ローブ・魔法使い
-    priest:  { body: '#dddddd', leg: '#888888' }, // 白ローブ・僧侶
-    thief:   { body: '#226622', leg: '#113311' }, // 緑の服・盗賊
+function createPlayer(name, jobKey) {
+  const job = JOBS[jobKey];
+  return {
+    name, job: jobKey, lv: 1, exp: 0, expNext: expNeeded(1),
+    hp: job.base.hp, maxHp: job.base.hp,
+    mp: job.base.mp, maxMp: job.base.mp,
+    baseAtk: job.base.atk, baseDef: job.base.def,
+    weapon: job.initialWeapon, armor: 'cloth',
+    items: [{ id: 'herb', count: 3 }],
+    spells: [...job.spells],
+    gold: 120, poisoned: false, x: 0, y: 0,
   };
-  const { body, leg } = cfgs[jobKey] || cfgs.warrior;
-  const px = (c, r, col) => `${c * 2}px ${r * 2}px 0 0 ${col}`;
-  const s = [];
+}
+function expNeeded(lv) { return 6 * lv * (lv + 3); }
+function getAtk(p) { return p.baseAtk + WEAPONS[p.weapon].atk; }
+function getDef(p) { return p.baseDef + ARMORS[p.armor].def; }
+function getMaxMp(p) { return p.maxMp + ARMORS[p.armor].mpBonus; }
+function magicMul(p) { return 1 + WEAPONS[p.weapon].magicBonus; }
 
-  // row 0: 帽子/ヘルメット（body色）
-  [1,2,3,4].forEach(c => s.push(px(c, 0, body)));
-  // row 1: 顔（肌色）
-  [1,2,3,4].forEach(c => s.push(px(c, 1, skin)));
-  // row 2: 肩（body色、全幅）
-  [0,1,2,3,4,5].forEach(c => s.push(px(c, 2, body)));
-  // row 3: 上半身
-  [1,2,3,4].forEach(c => s.push(px(c, 3, body)));
-  // row 4: 腕（全幅）
-  [0,1,2,3,4,5].forEach(c => s.push(px(c, 4, body)));
-  // row 5: 下半身
-  [1,2,3,4].forEach(c => s.push(px(c, 5, body)));
-  // row 6-7: 足
-  [1,4].forEach(c => { s.push(px(c, 6, leg)); s.push(px(c, 7, leg)); });
+// =============================
+// マップ生成
+// =============================
+function createTownMap() {
+  const S = CONFIG.MAP_SIZE;
+  const g = Array.from({ length: S }, (_, y) =>
+    Array.from({ length: S }, (_, x) => (x === 0 || y === 0 || x === S - 1 || y === S - 1) ? TILE.WALL : TILE.FLOOR));
+  const put = (x, y, t) => { g[y][x] = t; };
 
-  return s.join(', ');
+  // 外周の木立
+  for (let i = 1; i < S - 1; i++) {
+    if (i % 3 !== 0) { put(i, 1, TILE.TREE); put(i, S - 2, TILE.TREE); put(1, i, TILE.TREE); put(S - 2, i, TILE.TREE); }
+  }
+  // 城と城の前庭
+  put(12, 2, TILE.CASTLE);
+  [[10, 2], [14, 2], [10, 3], [14, 3]].forEach(([x, y]) => put(x, y, TILE.TREE));
+  // 建物
+  put(4, 6, TILE.HOUSE);
+  put(8, 6, TILE.INN);
+  put(17, 6, TILE.MAGIC_SHOP);
+  put(5, 12, TILE.WEAPON_SHOP);
+  put(12, 12, TILE.ARMOR_SHOP);
+  put(19, 12, TILE.ITEM_SHOP);
+  // 池
+  for (let y = 16; y <= 18; y++) for (let x = 16; x <= 20; x++) put(x, y, TILE.WATER);
+  put(16, 16, TILE.FLOOR); put(20, 18, TILE.FLOOR);
+  // 木と花
+  [[3, 9], [7, 9], [15, 9], [20, 9], [3, 16], [6, 18], [9, 15], [21, 14], [14, 20], [9, 20]].forEach(([x, y]) => put(x, y, TILE.TREE));
+  [[6, 4], [18, 4], [11, 8], [13, 8], [4, 14], [10, 17], [15, 14], [21, 20], [3, 20], [18, 21]].forEach(([x, y]) => put(x, y, TILE.FLOWER));
+  // 洞窟の入口（南）
+  put(12, 22, TILE.DUNGEON_ENTRANCE);
+  put(12, 23, TILE.TREE);
+  put(11, 22, TILE.TREE); put(13, 22, TILE.TREE);
+  put(12, 21, TILE.FLOOR);
+
+  return { grid: g, startX: 4, startY: 7, returnX: 12, returnY: 21, id: 'town' };
+}
+
+function createDungeonMap(id) {
+  const S = CONFIG.MAP_SIZE;
+  const no = FLOORS[id].no;
+  const grid = Array.from({ length: S }, () => Array(S).fill(TILE.WALL));
+
+  // 迷路（再帰バックトラッキング）
+  const stack = [[1, 1]];
+  grid[1][1] = TILE.FLOOR;
+  while (stack.length) {
+    const [x, y] = stack[stack.length - 1];
+    const dirs = shuffle([[0, -2], [0, 2], [-2, 0], [2, 0]]);
+    let moved = false;
+    for (const [dx, dy] of dirs) {
+      const nx = x + dx, ny = y + dy;
+      if (nx > 0 && nx < S - 1 && ny > 0 && ny < S - 1 && grid[ny][nx] === TILE.WALL) {
+        grid[y + dy / 2][x + dx / 2] = TILE.FLOOR;
+        grid[ny][nx] = TILE.FLOOR;
+        stack.push([nx, ny]);
+        moved = true;
+        break;
+      }
+    }
+    if (!moved) stack.pop();
+  }
+  // 抜け道を開けて、行き止まりだらけにならないようにする
+  for (let k = 0; k < 28; k++) {
+    const x = rand(1, S - 2), y = rand(1, S - 2);
+    if (grid[y][x] !== TILE.WALL) continue;
+    const h = grid[y][x - 1] === TILE.FLOOR && grid[y][x + 1] === TILE.FLOOR;
+    const v = grid[y - 1] && grid[y + 1] && grid[y - 1][x] === TILE.FLOOR && grid[y + 1][x] === TILE.FLOOR;
+    if (h !== v) grid[y][x] = TILE.FLOOR;
+  }
+
+  // 入口からの歩数（通路の距離）を計算
+  const startX = 1, startY = 1;
+  const dist = Array.from({ length: S }, () => Array(S).fill(-1));
+  const q = [[startX, startY]];
+  dist[startY][startX] = 0;
+  while (q.length) {
+    const [x, y] = q.shift();
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy;
+      if (grid[ny][nx] === TILE.FLOOR && dist[ny][nx] < 0) {
+        dist[ny][nx] = dist[y][x] + 1;
+        q.push([nx, ny]);
+      }
+    }
+  }
+  const cells = [];
+  for (let y = 1; y < S - 1; y++) for (let x = 1; x < S - 1; x++) if (dist[y][x] > 0) cells.push({ x, y, d: dist[y][x] });
+  cells.sort((a, b) => b.d - a.d);
+  const used = new Set([`${startX},${startY}`]);
+  const take = (c, t) => { used.add(`${c.x},${c.y}`); grid[c.y][c.x] = t; return c; };
+  const farthestFree = () => cells.find(c => !used.has(`${c.x},${c.y}`));
+  const randomFree = (minD, maxD) => {
+    const pool = cells.filter(c => !used.has(`${c.x},${c.y}`) && c.d >= minD && c.d <= maxD);
+    return pool.length ? pool[rand(0, pool.length - 1)] : farthestFree();
+  };
+  const maxD = cells[0].d;
+
+  grid[startY][startX] = TILE.STAIR_UP;
+  let bossPos = null;
+  if (no < 5) {
+    take(farthestFree(), TILE.STAIR_DOWN);
+  } else {
+    bossPos = take(farthestFree(), TILE.BOSS);
+    take(farthestFree(), TILE.TREASURE);
+    take(farthestFree(), TILE.CELL);
+  }
+  if (no === 4) take(farthestFree(), TILE.LEGEND_CHEST);
+  const chestCount = no === 5 ? 2 : 3;
+  for (let i = 0; i < chestCount; i++) take(randomFree(6, maxD - 2), TILE.CHEST);
+  take(randomFree(Math.floor(maxD * 0.35), Math.floor(maxD * 0.7)), TILE.SPRING);
+  for (let i = 0; i < no + 1; i++) take(randomFree(4, maxD - 1), TILE.TRAP);
+
+  return { grid, startX, startY, id, bossPos };
+}
+
+function initMaps() {
+  game.maps = { town: createTownMap() };
+  game.explored = { town: new Set() };
+  for (const id of Object.keys(FLOORS)) {
+    game.maps[id] = createDungeonMap(id);
+    game.explored[id] = new Set();
+  }
 }
 
 // =============================
 // マップ描画
 // =============================
-function renderMap() {
-  const mapData = game.maps[game.currentMap];
-  const { grid } = mapData;
-  const S = CONFIG.MAP_SIZE;
-  const V = CONFIG.VIEW_SIZE;
-  const px = game.player.x;
-  const py = game.player.y;
-
-  // ビューポートの左上座標
-  let viewX = px - Math.floor(V / 2);
-  let viewY = py - Math.floor(V / 2);
-  viewX = clamp(viewX, 0, S - V);
-  viewY = clamp(viewY, 0, S - V);
-
-  const container = document.getElementById('map-container');
-  container.style.gridTemplateColumns = `repeat(${V}, ${CONFIG.TILE_SIZE}px)`;
-  container.innerHTML = '';
-
-  const explored = game.explored[game.currentMap];
-
-  for (let ry = 0; ry < V; ry++) {
-    for (let rx = 0; rx < V; rx++) {
-      const mx = viewX + rx;
-      const my = viewY + ry;
-      const key = `${mx},${my}`;
-
-      const tile = document.createElement('div');
-      tile.className = 'tile';
-
-      // 視野判定
-      const dist = Math.abs(mx - px) + Math.abs(my - py);
-      const isPlayer = (mx === px && my === py);
-      const inSight = dist <= CONFIG.FOG_RADIUS || isPlayer;
-      const wasExplored = explored.has(key);
-
-      if (!wasExplored && !inSight) {
-        // 未探索・視野外
-        tile.classList.add('fog-hidden');
-        container.appendChild(tile);
-        continue;
-      }
-
-      // タイル表示
-      const cell = grid[my][mx];
-      renderTile(tile, cell, isPlayer);
-
-      if (!inSight && wasExplored) {
-        tile.classList.add('fog-explored');
-      } else {
-        tile.classList.add('fog-visible');
-      }
-
-      container.appendChild(tile);
-    }
-  }
+let tilePx = 24;
+let viewW = CONFIG.VIEW_SIZE, viewH = CONFIG.VIEW_SIZE;
+function fitMap() {
+  const area = $('map-area');
+  if (!area) return;
+  const w = area.clientWidth, h = area.clientHeight || w;
+  // 横15マスを基準にタイルの大きさを決め、縦は画面の高さに合わせて増やす
+  tilePx = clamp(Math.floor(Math.min(w / CONFIG.VIEW_SIZE, h / CONFIG.VIEW_SIZE)), 14, 40);
+  viewW = CONFIG.VIEW_SIZE;
+  viewH = clamp(Math.floor(h / tilePx), CONFIG.VIEW_SIZE, CONFIG.MAP_SIZE);
+  if (viewH % 2 === 0) viewH--;
+  document.documentElement.style.setProperty('--tile', tilePx + 'px');
 }
 
-function renderTile(tile, cell, isPlayer) {
-  if (isPlayer) {
-    tile.classList.add('tile-player');
-    // CSSピクセルアートキャラクターを描画
-    const sprite = document.createElement('div');
-    sprite.className = 'player-sprite';
-    sprite.style.boxShadow = getPlayerBoxShadow(game.player.job);
-    tile.appendChild(sprite);
-    return;
+function renderMap() {
+  if (!game.player || !game.maps[game.currentMap]) return;
+  const { grid } = game.maps[game.currentMap];
+  const S = CONFIG.MAP_SIZE;
+  const p = game.player;
+  const viewX = clamp(p.x - Math.floor(viewW / 2), 0, S - viewW);
+  const viewY = clamp(p.y - Math.floor(viewH / 2), 0, S - viewH);
+  const container = $('map-container');
+  container.style.gridTemplateColumns = `repeat(${viewW}, var(--tile))`;
+  const explored = game.explored[game.currentMap];
+  const showFollower = game.flags.princessRescued && game.follower;
+  const isTown = game.currentMap === 'town';
+  const frag = document.createDocumentFragment();
+
+  for (let ry = 0; ry < viewH; ry++) {
+    for (let rx = 0; rx < viewW; rx++) {
+      const mx = viewX + rx, my = viewY + ry;
+      const key = `${mx},${my}`;
+      const tile = document.createElement('div');
+      tile.className = 'tile';
+      const isPlayer = mx === p.x && my === p.y;
+      const inSight = isTown || Math.abs(mx - p.x) + Math.abs(my - p.y) <= CONFIG.FOG_RADIUS;
+      if (!inSight && !explored.has(key)) {
+        tile.classList.add('fog-hidden');
+        frag.appendChild(tile);
+        continue;
+      }
+      const look = Art.cellLayers(game.currentMap, grid[my][mx]);
+      const layers = [...look.layers];
+      if (showFollower && game.follower.x === mx && game.follower.y === my && !isPlayer) layers.unshift(Art.princessSprite());
+      if (isPlayer) layers.unshift(Art.playerSprite(p.job));
+      tile.style.backgroundImage = layers.join(',');
+      if (look.label && !isPlayer) {
+        const lb = document.createElement('span');
+        lb.className = 'tile-label';
+        lb.textContent = look.label;
+        tile.appendChild(lb);
+      }
+      if (!inSight) tile.classList.add('fog-explored');
+      frag.appendChild(tile);
+    }
   }
-  switch (cell) {
-    case TILE.WALL:
-      tile.textContent = '█';
-      tile.classList.add('tile-wall');
-      break;
-    case TILE.FLOOR:
-      tile.textContent = '·';
-      tile.classList.add('tile-floor');
-      break;
-    case TILE.STAIR_DOWN:
-      tile.textContent = '▼';
-      tile.classList.add('tile-stair-down');
-      break;
-    case TILE.STAIR_UP:
-      tile.textContent = '▲';
-      tile.classList.add('tile-stair-up');
-      break;
-    case TILE.HOUSE:
-      tile.textContent = 'H';
-      tile.classList.add('tile-building');
-      break;
-    case TILE.INN:
-      tile.textContent = 'I';
-      tile.classList.add('tile-building');
-      break;
-    case TILE.MAGIC_SHOP:
-      tile.textContent = 'M';
-      tile.classList.add('tile-building');
-      break;
-    case TILE.WEAPON_SHOP:
-      tile.textContent = 'W';
-      tile.classList.add('tile-building');
-      break;
-    case TILE.ARMOR_SHOP:
-      tile.textContent = 'A';
-      tile.classList.add('tile-building');
-      break;
-    case TILE.ITEM_SHOP:
-      tile.textContent = 'T';
-      tile.classList.add('tile-building');
-      break;
-    case TILE.DUNGEON_ENTRANCE:
-      tile.textContent = 'D';
-      tile.classList.add('tile-building');
-      break;
-    case TILE.BOSS:
-      tile.textContent = 'B';
-      tile.classList.add('tile-boss');
-      break;
-    case TILE.TREASURE:
-      tile.textContent = '$';
-      tile.classList.add('tile-treasure');
-      break;
-    default:
-      tile.textContent = ' ';
-      tile.classList.add('tile-floor');
-  }
+  container.replaceChildren(frag);
 }
 
 // =============================
-// ステータス表示更新
+// ステータス表示
 // =============================
 function updateStatusPanel() {
   const p = game.player;
-  const job = JOBS[p.job];
-  const w = WEAPONS[p.weapon];
-  const a = ARMORS[p.armor];
-  const realMaxMp = getMaxMp(p);
-
-  document.getElementById('st-name').textContent = `名: ${p.name}`;
-  document.getElementById('st-job').textContent = `職: ${job.name}`;
-  document.getElementById('st-lv').textContent = `LV: ${p.lv}`;
-  document.getElementById('st-exp').textContent = `EXP: ${p.exp}/${p.expNext}`;
-
-  const hpEl = document.getElementById('st-hp');
-  hpEl.textContent = `HP: ${p.hp}/${p.maxHp}`;
+  if (!p) return;
+  $('st-name').textContent = p.name;
+  $('st-job').textContent = JOBS[p.job].name;
+  $('st-lv').textContent = `LV ${p.lv}`;
+  $('st-exp').textContent = `EXP ${p.exp}/${p.expNext}`;
+  const hpEl = $('st-hp');
+  hpEl.textContent = `HP ${p.hp}/${p.maxHp}`;
   hpEl.style.color = hpColor(p.hp, p.maxHp);
-
-  const mpEl = document.getElementById('st-mp');
-  mpEl.textContent = `MP: ${p.mp}/${realMaxMp}`;
-
-  document.getElementById('st-atk').textContent = `ATK: ${getAtk(p)}`;
-  document.getElementById('st-def').textContent = `DEF: ${getDef(p)}`;
-  document.getElementById('st-weapon').textContent = `武: ${w.name}`;
-  document.getElementById('st-armor').textContent = `防: ${a.name}`;
-  document.getElementById('st-gold').textContent = `金: ${p.gold}P`;
-
-  // マップ名
-  const mapNames = { town: '町', dungeon1: 'B1F', dungeon2: 'B2F', dungeon3: 'B3F' };
-  let loc = mapNames[game.currentMap] || '─';
+  $('st-mp').textContent = `MP ${p.mp}/${getMaxMp(p)}`;
+  $('st-atk').textContent = `攻 ${getAtk(p)}`;
+  $('st-def').textContent = `防 ${getDef(p)}`;
+  $('st-weapon').textContent = `武: ${WEAPONS[p.weapon].name}`;
+  $('st-armor').textContent = `防: ${ARMORS[p.armor].name}`;
+  $('st-gold').textContent = `${p.gold} ペリカ`;
+  let loc = MAP_NAMES[game.currentMap] || '─';
   if (p.poisoned) loc += ' [毒]';
-  document.getElementById('st-location').textContent = `場所: ${loc}`;
+  if (game.flags.princessRescued) loc += ' ♥姫';
+  $('st-location').textContent = loc;
 
-  // アイテムリスト
-  const itemsEl = document.getElementById('st-items');
-  itemsEl.innerHTML = '';
-  if (p.items.length === 0) {
+  const itemsEl = $('st-items');
+  itemsEl.replaceChildren();
+  if (!p.items.length) {
     const d = document.createElement('div');
     d.textContent = 'なし';
     itemsEl.appendChild(d);
   } else {
-    for (const item of p.items) {
+    for (const it of p.items) {
       const d = document.createElement('div');
-      d.textContent = `${CONSUMABLES[item.id].name} x${item.count}`;
+      d.textContent = `${CONSUMABLES[it.id].name} x${it.count}`;
       itemsEl.appendChild(d);
     }
   }
 }
 
 // =============================
-// 移動処理
+// 移動
 // =============================
 const MOVE_MAP = {
   ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
@@ -628,1265 +466,1003 @@ const MOVE_MAP = {
 
 function tryMove(dx, dy) {
   if (!game.inputEnabled || game.screen !== 'game') return;
-
   const p = game.player;
-  const nx = p.x + dx;
-  const ny = p.y + dy;
-  const mapData = game.maps[game.currentMap];
-  const { grid } = mapData;
-
+  const nx = p.x + dx, ny = p.y + dy;
+  const { grid } = game.maps[game.currentMap];
   if (nx < 0 || ny < 0 || nx >= CONFIG.MAP_SIZE || ny >= CONFIG.MAP_SIZE) return;
-
   const cell = grid[ny][nx];
-  if (cell === TILE.WALL) {
-    addMessage('壁があって進めない。');
+  if (BLOCKING.has(cell)) {
+    if (cell === TILE.WATER) addMessage('池だ。泳いで渡るのはやめておこう。');
     return;
   }
-
-  // 移動実行
-  p.x = nx;
-  p.y = ny;
-
-  // 探索済みに追加（現在位置周辺）
+  const px = p.x, py = p.y;
+  p.x = nx; p.y = ny;
+  if (game.flags.princessRescued) game.follower = { x: px, y: py };
+  game.stats.steps++;
   markExplored();
-
-  // タイルイベント処理
   handleTileEvent(cell);
 }
 
-// 視野内を探索済みに登録
 function markExplored() {
   const p = game.player;
-  const explored = game.explored[game.currentMap];
-  const S = CONFIG.MAP_SIZE;
-  const R = CONFIG.FOG_RADIUS;
-
-  for (let dy = -R; dy <= R; dy++) {
-    for (let dx = -R; dx <= R; dx++) {
-      const ax = p.x + dx;
-      const ay = p.y + dy;
-      if (ax >= 0 && ay >= 0 && ax < S && ay < S) {
-        explored.add(`${ax},${ay}`);
-      }
-    }
+  const ex = game.explored[game.currentMap];
+  const R = CONFIG.FOG_RADIUS, S = CONFIG.MAP_SIZE;
+  for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+    const ax = p.x + dx, ay = p.y + dy;
+    if (ax >= 0 && ay >= 0 && ax < S && ay < S && Math.abs(dx) + Math.abs(dy) <= R) ex.add(`${ax},${ay}`);
   }
 }
 
-// タイルイベント
+function setCell(t) {
+  const p = game.player;
+  game.maps[game.currentMap].grid[p.y][p.x] = t;
+}
+
 function handleTileEvent(cell) {
   const p = game.player;
-  const mapData = game.maps[game.currentMap];
+  const floor = FLOORS[game.currentMap];
 
   switch (cell) {
     case TILE.HOUSE:
-      if (game.currentMap === 'town' && game.flags.hasTreasure) {
-        // ゲームクリア
-        triggerEnding();
-        return;
-      } else if (game.currentMap === 'town') {
-        addMessage('家だ。ゴールを目指して冒険しよう！');
-      }
-      break;
-
-    case TILE.INN:
-      openInn();
+      openDialog('[ 自宅 ]', game.flags.princessRescued
+        ? '母「まあ、お姫様！ 早くお城へお連れしなさい」'
+        : '母「洞窟の奥は危ないわ。疲れたら宿屋で休むのよ。<br>セーブはメニューからできるからね」');
       return;
-
-    case TILE.MAGIC_SHOP:
-      openMagicShop();
-      return;
-
-    case TILE.WEAPON_SHOP:
-      openWeaponShop();
-      return;
-
-    case TILE.ARMOR_SHOP:
-      openArmorShop();
-      return;
-
-    case TILE.ITEM_SHOP:
-      openItemShop();
-      return;
-
+    case TILE.CASTLE: openCastle(); return;
+    case TILE.INN: openInn(); return;
+    case TILE.MAGIC_SHOP: openMagicShop(); return;
+    case TILE.WEAPON_SHOP: openEquipShop('weapon'); return;
+    case TILE.ARMOR_SHOP: openEquipShop('armor'); return;
+    case TILE.ITEM_SHOP: openItemShop(); return;
     case TILE.DUNGEON_ENTRANCE:
-      // 町→ダンジョンB1
+      Sound.sfx('stairs');
       changeMap('dungeon1');
-      addMessage('ダンジョンに入った！ 慎重に進め。', '#ffaa00');
+      addMessage('謎の洞窟に足を踏み入れた…', '#ffaa00');
       return;
-
     case TILE.STAIR_DOWN:
-      // 下の階へ
-      if (game.currentMap === 'dungeon1') {
-        changeMap('dungeon2');
-        addMessage('B2Fへ降りた。', '#ffaa00');
-      } else if (game.currentMap === 'dungeon2') {
-        changeMap('dungeon3');
-        addMessage('B3Fへ降りた！ ボスが待ち構えている...', '#ff6666');
-      }
-      return;
-
-    case TILE.STAIR_UP:
-      // 上の階へ
-      if (game.currentMap === 'dungeon1') {
-        changeMap('town');
-        addMessage('町へ戻った。', '#00ff41');
-      } else if (game.currentMap === 'dungeon2') {
-        changeMap('dungeon1');
-        addMessage('B1Fへ戻った。', '#00ff41');
-      } else if (game.currentMap === 'dungeon3') {
-        changeMap('dungeon2');
-        addMessage('B2Fへ戻った。', '#00ff41');
-      }
-      return;
-
-    case TILE.BOSS:
-      if (!game.flags.bossEncountered) {
-        game.flags.bossEncountered = true;
-        addMessage('暗黒竜ヴォルガン が現れた！', '#ff3333');
-        startBattle(true);
+      if (game.currentMap === 'dungeon3' && !game.flags.golemDefeated) {
+        addMessage('階段の前に、巨大な石の門番が立ちはだかった！', '#ff6666');
+        startBattle('golem');
         return;
-      } else if (game.flags.bossDefeated) {
-        addMessage('ボスはすでに倒されている。');
+      }
+      Sound.sfx('stairs');
+      changeMap(MAP_ORDER[MAP_ORDER.indexOf(game.currentMap) + 1]);
+      addMessage(game.currentMap === 'dungeon5'
+        ? 'B5Fへ降りた。竜の唸り声が聞こえる…' : `${MAP_NAMES[game.currentMap]}へ降りた。`, game.currentMap === 'dungeon5' ? '#ff6666' : '#ffaa00');
+      return;
+    case TILE.STAIR_UP: {
+      Sound.sfx('stairsUp');
+      const prev = MAP_ORDER[MAP_ORDER.indexOf(game.currentMap) - 1];
+      changeMap(prev);
+      addMessage(prev === 'town' ? '町へ戻った。' : `${MAP_NAMES[prev]}へ戻った。`, '#00ff41');
+      return;
+    }
+    case TILE.CHEST: openChest(floor.no); break;
+    case TILE.LEGEND_CHEST: openLegendChest(); break;
+    case TILE.SPRING:
+      p.hp = p.maxHp; p.mp = getMaxMp(p); p.poisoned = false;
+      setCell(TILE.SPRING_DRY);
+      Sound.sfx('heal');
+      flashScreen('heal');
+      addMessage('不思議な泉の水を飲んだ。HP・MPが全回復した！', '#66ccff');
+      renderAll();
+      return;
+    case TILE.SPRING_DRY:
+      addMessage('泉はもう枯れている。');
+      break;
+    case TILE.TRAP: triggerTrap(floor.no); if (game.screen !== 'game') return; break;
+    case TILE.BOSS:
+      if (!game.flags.bossDefeated) {
+        addMessage('暗黒竜ヴォルガンが目を覚ました！', '#ff3333');
+        startBattle('boss');
+        return;
       }
       break;
-
     case TILE.TREASURE:
       if (!game.flags.bossDefeated) {
-        addMessage('何かに阻まれて宝箱を開けられない...', '#888');
-      } else if (!game.flags.hasTreasure) {
-        game.flags.hasTreasure = true;
-        addMessage('伝説の秘宝を手に入れた！！', '#ffd700');
-        addMessage('町の家に戻ろう！', '#00ff41');
-        // 宝箱タイルを床に変更
-        mapData.grid[p.y][p.x] = TILE.FLOOR;
+        addMessage('竜の魔力に阻まれて、秘宝に近づけない…', '#888');
       } else {
-        addMessage('もうすでに秘宝を持っている。');
+        game.flags.hasTreasure = true;
+        setCell(TILE.FLOOR);
+        Sound.sfx('chest');
+        flashScreen('gold');
+        addMessage('伝説の秘宝「竜の瞳」を手に入れた！', '#ffd700');
       }
-      break;
-  }
-
-  // ランダムエンカウント（ダンジョンのみ）
-  checkEncounter();
-
-  // 毒ダメージ
-  if (p.poisoned) {
-    const poisonDmg = Math.max(1, Math.floor(p.maxHp * 0.05));
-    p.hp = Math.max(1, p.hp - poisonDmg);
-    addMessage(`毒のダメージ！ ${poisonDmg}ダメージ`, '#ff66ff');
-    if (p.hp <= 0) {
-      p.hp = 0;
-      triggerGameOver();
+      renderAll();
       return;
-    }
+    case TILE.CELL:
+      if (!game.flags.bossDefeated) {
+        addMessage('牢の中に誰かいる…。竜の魔力で扉が開かない。', '#888');
+      } else {
+        game.flags.princessRescued = true;
+        game.follower = null;
+        setCell(TILE.FLOOR);
+        Sound.sfx('door');
+        openDialog('[ 姫を救い出した！ ]',
+          '姫「助けに来てくださったのですね…！<br>さあ、一緒に城へ帰りましょう」<br><br><span style="color:#0af">姫が仲間に加わった。町の城へ連れて帰ろう。</span>');
+        renderAll();
+        return;
+      }
+      renderAll();
+      return;
   }
 
-  renderMap();
-  updateStatusPanel();
-}
+  if (game.screen !== 'game') return;
+  if (game.inputEnabled) checkEncounter();
 
-// マップ移動
-function changeMap(targetMap) {
-  const prevMap = game.currentMap;
-  game.currentMap = targetMap;
-  const mapData = game.maps[targetMap];
-
-  if (targetMap === 'town') {
-    if (prevMap && prevMap !== 'town') {
-      // ダンジョンから戻った場合はダンジョン入口（D）の手前に立つ
-      game.player.x = game.maps.town.dungeonEntranceX;
-      game.player.y = game.maps.town.dungeonEntranceY;
+  if (p.poisoned && game.screen === 'game') {
+    if (Math.random() < 0.06) {
+      p.poisoned = false;
+      addMessage('毒が抜けた。', '#66ccff');
     } else {
-      // ゲーム開始時は固定スタート位置
-      game.player.x = game.maps.town.startX;
-      game.player.y = game.maps.town.startY;
+      const dmg = Math.max(1, Math.floor(p.maxHp * 0.04));
+      p.hp = Math.max(1, p.hp - dmg);
+      addMessage(`毒が体をむしばむ… ${dmg}ダメージ`, '#ff66ff');
     }
+  }
+  renderAll();
+}
+
+function renderAll() { renderMap(); updateStatusPanel(); }
+
+function changeMap(target) {
+  const prev = game.currentMap;
+  game.currentMap = target;
+  const m = game.maps[target];
+  if (target === 'town') {
+    if (prev && prev !== 'town') { game.player.x = m.returnX; game.player.y = m.returnY; }
+    else { game.player.x = m.startX; game.player.y = m.startY; }
+  } else if (MAP_ORDER.indexOf(prev) > MAP_ORDER.indexOf(target)) {
+    // 下の階から戻ってきた：下り階段の位置に立つ
+    const g = m.grid;
+    let found = null;
+    for (let y = 0; y < g.length && !found; y++) for (let x = 0; x < g.length; x++) if (g[y][x] === TILE.STAIR_DOWN) { found = { x, y }; break; }
+    game.player.x = found ? found.x : m.startX;
+    game.player.y = found ? found.y : m.startY;
   } else {
-    // ダンジョンはスタート位置
-    game.player.x = mapData.startX;
-    game.player.y = mapData.startY;
+    game.player.x = m.startX; game.player.y = m.startY;
   }
-
+  game.follower = null;
   markExplored();
-  renderMap();
-  updateStatusPanel();
+  playMapBgm();
+  renderAll();
 }
 
-// ランダムエンカウント判定
-function checkEncounter() {
-  const rateMap = { dungeon1: CONFIG.ENC_RATE_B1, dungeon2: CONFIG.ENC_RATE_B2, dungeon3: CONFIG.ENC_RATE_B3 };
-  const rate = rateMap[game.currentMap];
-  if (!rate) return; // 町はエンカウントなし
+function playMapBgm() {
+  if (game.currentMap === 'town') Sound.bgm('town');
+  else Sound.bgm(FLOORS[game.currentMap].bgm);
+}
 
-  if (Math.random() < rate) {
-    startBattle(false);
+function checkEncounter() {
+  const f = FLOORS[game.currentMap];
+  if (!f) return;
+  if (Math.random() < f.enc) startBattle('normal');
+}
+
+// ---------- 宝箱・罠 ----------
+function openChest(no) {
+  const p = game.player;
+  setCell(TILE.CHEST_OPEN);
+  Sound.sfx('chest');
+  if (Math.random() < 0.4) {
+    const g = rand(20, 40) * no;
+    p.gold += g;
+    addMessage(`宝箱を開けた！ ${g}ペリカ手に入れた！`, '#ffd700');
+    return;
+  }
+  const table = no <= 1 ? ['herb', 'herb', 'antidote', 'super_herb']
+    : no === 2 ? ['herb', 'super_herb', 'antidote', 'ether']
+    : no === 3 ? ['super_herb', 'ether', 'holy_water', 'super_herb']
+    : ['super_herb', 'mega_herb', 'ether', 'holy_water'];
+  const id = table[rand(0, table.length - 1)];
+  const cnt = rand(1, 2);
+  if (addItem(p, id, cnt)) addMessage(`宝箱を開けた！ ${CONSUMABLES[id].name}を${cnt}個手に入れた！`, '#ffd700');
+  else { p.gold += 50; addMessage('持ち物がいっぱいだ。代わりに50ペリカ拾った。', '#ffd700'); }
+}
+
+function openLegendChest() {
+  const p = game.player;
+  setCell(TILE.CHEST_OPEN);
+  const id = LEGEND_WEAPON[p.job];
+  p.weapon = id;
+  game.flags.legendTaken = true;
+  Sound.sfx('levelup');
+  flashScreen('gold');
+  openDialog('[ 伝説の武器 ]', `古びた宝箱の中に、<span style="color:#ffd700">${WEAPONS[id].name}</span>が眠っていた！<br>手に取ると、力がみなぎってくる…<br><br>${WEAPONS[id].name}を装備した。（攻撃力 +${WEAPONS[id].atk}）`);
+}
+
+function triggerTrap(no) {
+  const p = game.player;
+  setCell(TILE.TRAP_SEEN);
+  if (p.job === 'thief') {
+    Sound.sfx('select');
+    addMessage('罠を見破って、難なく解除した。', '#66ccff');
+    return;
+  }
+  Sound.sfx('trap');
+  flashScreen('damage');
+  if (Math.random() < 0.4 && !p.poisoned) {
+    p.poisoned = true;
+    addMessage('毒針の罠だ！ 毒を受けた！', '#ff66ff');
+  } else {
+    const dmg = Math.floor(p.maxHp * 0.08) + no * 3;
+    p.hp = Math.max(1, p.hp - dmg);
+    addMessage(`落とし穴の罠だ！ ${dmg}ダメージ！`, '#ff6666');
   }
 }
 
 // =============================
-// 敵SVGグラフィック（ブラックオニキス/ウィザードリィ風）
+// 演出
 // =============================
-function makeSVGBase(content) {
-  return `<svg width="64" height="64" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">${content}</svg>`;
+function flashScreen(kind) {
+  const el = $('fx-flash');
+  el.className = '';
+  void el.offsetWidth;
+  el.className = 'fx-' + kind;
 }
 
-function makeSVGSlime() {
-  return makeSVGBase(`
-    <rect x="5" y="3" width="6" height="1" fill="#1133cc"/>
-    <rect x="4" y="4" width="8" height="6" fill="#1133cc"/>
-    <rect x="5" y="10" width="6" height="1" fill="#1133cc"/>
-    <rect x="4" y="4" width="2" height="2" fill="#5566ee"/>
-    <rect x="5" y="6" width="2" height="2" fill="white"/>
-    <rect x="9" y="6" width="2" height="2" fill="white"/>
-    <rect x="6" y="7" width="1" height="1" fill="#111"/>
-    <rect x="10" y="7" width="1" height="1" fill="#111"/>
-    <rect x="6" y="9" width="4" height="1" fill="#0022aa"/>
-  `);
+function popNumber(text, cls, anchorId) {
+  const anchor = $(anchorId);
+  if (!anchor) return;
+  const s = document.createElement('div');
+  s.className = 'pop-num ' + cls;
+  s.textContent = text;
+  anchor.appendChild(s);
+  setTimeout(() => s.remove(), 900);
 }
 
-function makeSVGBat() {
-  return makeSVGBase(`
-    <rect x="1" y="5" width="5" height="1" fill="#222"/>
-    <rect x="1" y="6" width="4" height="3" fill="#333"/>
-    <rect x="2" y="9" width="3" height="1" fill="#333"/>
-    <rect x="10" y="5" width="5" height="1" fill="#222"/>
-    <rect x="11" y="6" width="4" height="3" fill="#333"/>
-    <rect x="11" y="9" width="3" height="1" fill="#333"/>
-    <rect x="5" y="4" width="6" height="3" fill="#444"/>
-    <rect x="6" y="7" width="4" height="3" fill="#333"/>
-    <rect x="6" y="5" width="1" height="1" fill="#cc2200"/>
-    <rect x="9" y="5" width="1" height="1" fill="#cc2200"/>
-    <rect x="7" y="10" width="2" height="1" fill="#222"/>
-  `);
-}
-
-function makeSVGGoblin() {
-  return makeSVGBase(`
-    <rect x="2" y="4" width="2" height="3" fill="#2d7a1a"/>
-    <rect x="12" y="4" width="2" height="3" fill="#2d7a1a"/>
-    <rect x="4" y="2" width="8" height="5" fill="#44aa22"/>
-    <rect x="5" y="4" width="2" height="1" fill="#cc1100"/>
-    <rect x="9" y="4" width="2" height="1" fill="#cc1100"/>
-    <rect x="6" y="6" width="4" height="1" fill="#226611"/>
-    <rect x="4" y="7" width="8" height="4" fill="#336622"/>
-    <rect x="3" y="8" width="2" height="3" fill="#336622"/>
-    <rect x="11" y="8" width="2" height="3" fill="#336622"/>
-    <rect x="5" y="11" width="3" height="4" fill="#225511"/>
-    <rect x="8" y="11" width="3" height="4" fill="#225511"/>
-  `);
-}
-
-function makeSVGZombie() {
-  return makeSVGBase(`
-    <rect x="5" y="1" width="6" height="5" fill="#667766"/>
-    <rect x="6" y="3" width="1" height="1" fill="#334433"/>
-    <rect x="9" y="3" width="1" height="1" fill="#334433"/>
-    <rect x="6" y="5" width="4" height="1" fill="#445544"/>
-    <rect x="4" y="6" width="8" height="5" fill="#556655"/>
-    <rect x="1" y="7" width="3" height="2" fill="#667766"/>
-    <rect x="12" y="5" width="3" height="2" fill="#667766"/>
-    <rect x="5" y="11" width="3" height="4" fill="#445544"/>
-    <rect x="8" y="11" width="3" height="4" fill="#445544"/>
-    <rect x="4" y="6" width="1" height="2" fill="#778877"/>
-    <rect x="11" y="6" width="1" height="2" fill="#778877"/>
-  `);
-}
-
-function makeSVGSkeleton() {
-  return makeSVGBase(`
-    <rect x="5" y="1" width="6" height="5" fill="#dddddd"/>
-    <rect x="5" y="2" width="2" height="2" fill="#222"/>
-    <rect x="9" y="2" width="2" height="2" fill="#222"/>
-    <rect x="6" y="5" width="4" height="1" fill="#222"/>
-    <rect x="5" y="6" width="1" height="4" fill="#dddddd"/>
-    <rect x="7" y="6" width="2" height="4" fill="#dddddd"/>
-    <rect x="10" y="6" width="1" height="4" fill="#dddddd"/>
-    <rect x="3" y="7" width="2" height="3" fill="#dddddd"/>
-    <rect x="11" y="7" width="2" height="3" fill="#cccccc"/>
-    <rect x="5" y="10" width="3" height="5" fill="#dddddd"/>
-    <rect x="8" y="10" width="3" height="5" fill="#dddddd"/>
-    <rect x="13" y="3" width="2" height="9" fill="#aaaaaa"/>
-    <rect x="13" y="2" width="2" height="2" fill="#777"/>
-  `);
-}
-
-function makeSVGSnake() {
-  return makeSVGBase(`
-    <rect x="7" y="1" width="4" height="3" fill="#33aa22"/>
-    <rect x="6" y="1" width="1" height="1" fill="#cc0000"/>
-    <rect x="11" y="1" width="1" height="1" fill="#cc0000"/>
-    <rect x="6" y="2" width="1" height="1" fill="#ffff00"/>
-    <rect x="10" y="2" width="1" height="1" fill="#ffff00"/>
-    <rect x="9" y="4" width="5" height="3" fill="#33aa22"/>
-    <rect x="5" y="5" width="5" height="3" fill="#33aa22"/>
-    <rect x="3" y="7" width="4" height="3" fill="#33aa22"/>
-    <rect x="3" y="10" width="7" height="3" fill="#33aa22"/>
-    <rect x="7" y="13" width="4" height="2" fill="#33aa22"/>
-    <rect x="6" y="4" width="4" height="2" fill="#44cc33"/>
-  `);
-}
-
-function makeSVGOrc() {
-  return makeSVGBase(`
-    <rect x="3" y="2" width="10" height="6" fill="#8b5e3c"/>
-    <rect x="2" y="3" width="2" height="4" fill="#7a4e2d"/>
-    <rect x="12" y="3" width="2" height="4" fill="#7a4e2d"/>
-    <rect x="5" y="4" width="2" height="2" fill="#cc3300"/>
-    <rect x="9" y="4" width="2" height="2" fill="#cc3300"/>
-    <rect x="6" y="7" width="2" height="1" fill="#eedd99"/>
-    <rect x="8" y="7" width="2" height="1" fill="#eedd99"/>
-    <rect x="2" y="8" width="12" height="5" fill="#7a4e2d"/>
-    <rect x="1" y="9" width="2" height="4" fill="#8b5e3c"/>
-    <rect x="13" y="9" width="2" height="4" fill="#8b5e3c"/>
-    <rect x="3" y="13" width="4" height="3" fill="#5c3d1e"/>
-    <rect x="9" y="13" width="4" height="3" fill="#5c3d1e"/>
-  `);
-}
-
-function makeSVGDarkWarrior() {
-  return makeSVGBase(`
-    <rect x="5" y="0" width="6" height="2" fill="#222266"/>
-    <rect x="4" y="2" width="8" height="4" fill="#111133"/>
-    <rect x="5" y="3" width="2" height="1" fill="#cc2200"/>
-    <rect x="9" y="3" width="2" height="1" fill="#cc2200"/>
-    <rect x="3" y="6" width="10" height="6" fill="#111133"/>
-    <rect x="1" y="6" width="3" height="5" fill="#222244"/>
-    <rect x="12" y="6" width="3" height="5" fill="#222244"/>
-    <rect x="4" y="12" width="4" height="4" fill="#111122"/>
-    <rect x="8" y="12" width="4" height="4" fill="#111122"/>
-    <rect x="14" y="3" width="1" height="10" fill="#888"/>
-    <rect x="13" y="2" width="2" height="2" fill="#555"/>
-  `);
-}
-
-function makeSVGCerberus() {
-  return makeSVGBase(`
-    <rect x="6" y="0" width="4" height="3" fill="#442222"/>
-    <rect x="1" y="2" width="4" height="3" fill="#442222"/>
-    <rect x="11" y="2" width="4" height="3" fill="#442222"/>
-    <rect x="5" y="4" width="6" height="4" fill="#552222"/>
-    <rect x="3" y="7" width="10" height="4" fill="#442222"/>
-    <rect x="2" y="11" width="3" height="4" fill="#331111"/>
-    <rect x="5" y="11" width="3" height="4" fill="#331111"/>
-    <rect x="8" y="11" width="3" height="4" fill="#331111"/>
-    <rect x="11" y="11" width="3" height="4" fill="#331111"/>
-    <rect x="7" y="1" width="1" height="1" fill="#cc0000"/>
-    <rect x="9" y="1" width="1" height="1" fill="#cc0000"/>
-    <rect x="1" y="3" width="1" height="1" fill="#cc0000"/>
-    <rect x="4" y="3" width="1" height="1" fill="#cc0000"/>
-    <rect x="11" y="3" width="1" height="1" fill="#cc0000"/>
-    <rect x="14" y="3" width="1" height="1" fill="#cc0000"/>
-  `);
-}
-
-function makeSVGDragon() {
-  return makeSVGBase(`
-    <rect x="0" y="4" width="5" height="4" fill="#880000"/>
-    <rect x="11" y="4" width="5" height="4" fill="#880000"/>
-    <rect x="0" y="2" width="5" height="3" fill="#aa1100"/>
-    <rect x="11" y="2" width="5" height="3" fill="#aa1100"/>
-    <rect x="1" y="0" width="4" height="3" fill="#cc2200"/>
-    <rect x="11" y="0" width="4" height="3" fill="#cc2200"/>
-    <rect x="5" y="3" width="6" height="6" fill="#cc2200"/>
-    <rect x="4" y="5" width="8" height="3" fill="#dd3300"/>
-    <rect x="6" y="2" width="4" height="3" fill="#cc2200"/>
-    <rect x="6" y="2" width="2" height="1" fill="#ffcc00"/>
-    <rect x="8" y="2" width="2" height="1" fill="#ffcc00"/>
-    <rect x="5" y="4" width="2" height="1" fill="#ff5500"/>
-    <rect x="9" y="4" width="2" height="1" fill="#ff5500"/>
-    <rect x="5" y="9" width="6" height="3" fill="#cc2200"/>
-    <rect x="6" y="12" width="4" height="2" fill="#aa1100"/>
-    <rect x="5" y="14" width="3" height="2" fill="#880000"/>
-    <rect x="8" y="14" width="3" height="2" fill="#880000"/>
-  `);
-}
-
-function makeSVGDefault() {
-  return makeSVGBase(`
-    <rect x="4" y="2" width="8" height="12" fill="#666"/>
-    <rect x="6" y="4" width="2" height="2" fill="#cc0000"/>
-    <rect x="8" y="4" width="2" height="2" fill="#cc0000"/>
-  `);
-}
-
-// 敵の種別からSVGを返す
-function getEnemySpriteSVG(enemy) {
-  const { type, name } = enemy;
-  if (type === 'boss')   return makeSVGDragon();
-  if (type === 'slime')  return makeSVGSlime();
-  if (type === 'bat')    return makeSVGBat();
-  if (type === 'goblin') return makeSVGGoblin();
-  if (type === 'snake')  return makeSVGSnake();
-  if (type === 'orc')    return makeSVGOrc();
-  if (type === 'dark')   return makeSVGDarkWarrior();
-  if (type === 'beast')  return makeSVGCerberus();
-  if (type === 'undead') return name.includes('骸骨') ? makeSVGSkeleton() : makeSVGZombie();
-  return makeSVGDefault();
+function shake(id) {
+  const el = $(id);
+  el.classList.remove('shake');
+  void el.offsetWidth;
+  el.classList.add('shake');
 }
 
 // =============================
-// バトルシステム
+// カーソル（キーボード選択）
+// =============================
+let cursor = { context: null, index: 0 };
+function getCursorButtons() {
+  switch (cursor.context) {
+    case 'battle_main': return [...document.querySelectorAll('#battle-main-cmd .battle-btn')];
+    case 'battle_sub': return [...document.querySelectorAll('#sub-cmd-list .battle-btn'), $('btn-sub-back')].filter(Boolean);
+    case 'shop': return [...document.querySelectorAll('#shop-content .shop-btn'), $('btn-shop-close')].filter(Boolean);
+    case 'menu': return [...document.querySelectorAll('#menu-window .btn')];
+    default: return [];
+  }
+}
+function renderCursor() {
+  getCursorButtons().forEach((b, i) => b.classList.toggle('cursor-selected', i === cursor.index));
+}
+function setCursorContext(ctx, index) { cursor.context = ctx; cursor.index = index || 0; renderCursor(); }
+function moveCursor(d) {
+  const b = getCursorButtons();
+  if (!b.length) return;
+  cursor.index = (cursor.index + d + b.length) % b.length;
+  renderCursor();
+}
+function executeCursor() {
+  const b = getCursorButtons()[cursor.index];
+  if (b && !b.disabled) b.click();
+}
+function handleCursorEscape() {
+  if (cursor.context === 'battle_sub') showBattleMainCmd();
+  else if (cursor.context === 'shop') closeShop();
+  else if (cursor.context === 'menu') toggleMenu();
+}
+
+// =============================
+// バトル
 // =============================
 let battleState = null;
 
-// =============================
-// カーソル管理（キーボード選択）
-// =============================
-let cursor = { context: null, index: 0 };
-
-// コンテキスト別のボタン一覧を取得
-function getCursorButtons() {
-  switch (cursor.context) {
-    case 'battle_main':
-      return [...document.querySelectorAll('#battle-main-cmd .battle-btn')];
-    case 'battle_sub':
-      return [
-        ...document.querySelectorAll('#sub-cmd-list .battle-btn'),
-        document.getElementById('btn-sub-back'),
-      ].filter(Boolean);
-    case 'shop':
-      return [
-        ...document.querySelectorAll('#shop-content .shop-btn'),
-        document.getElementById('btn-shop-close'),
-      ].filter(Boolean);
-    case 'menu':
-      return [
-        document.getElementById('btn-save'),
-        document.getElementById('btn-save-exit'),
-        document.getElementById('btn-menu-close'),
-      ].filter(Boolean);
-    default:
-      return [];
+function startBattle(kind) {
+  let tmpl;
+  if (kind === 'boss') tmpl = ENEMIES.boss;
+  else if (kind === 'golem') tmpl = ENEMIES.golem;
+  else {
+    const pool = ENEMIES[FLOORS[game.currentMap].pool];
+    tmpl = pool[rand(0, pool.length - 1)];
   }
-}
-
-// カーソルのレンダリング（選択中ボタンをハイライト）
-function renderCursor() {
-  const btns = getCursorButtons();
-  btns.forEach((btn, i) => {
-    if (i === cursor.index) {
-      btn.classList.add('cursor-selected');
-    } else {
-      btn.classList.remove('cursor-selected');
-    }
-  });
-}
-
-// カーソルコンテキストを設定してレンダリング
-function setCursorContext(context, index) {
-  cursor.context = context;
-  cursor.index = index !== undefined ? index : 0;
-  renderCursor();
-}
-
-// カーソルを移動（+1 or -1、ラップアラウンド）
-function moveCursor(delta) {
-  const btns = getCursorButtons();
-  if (!btns.length) return;
-  cursor.index = (cursor.index + delta + btns.length) % btns.length;
-  renderCursor();
-}
-
-// 選択中のボタンを実行
-function executeCursor() {
-  const btns = getCursorButtons();
-  const btn = btns[cursor.index];
-  if (btn && !btn.disabled) btn.click();
-}
-
-// Escapeキーの処理（コンテキスト別）
-function handleCursorEscape() {
-  switch (cursor.context) {
-    case 'battle_sub':
-      showBattleMainCmd();
-      break;
-    case 'shop':
-      closeShop();
-      break;
-    case 'menu':
-      toggleMenu();
-      break;
-  }
-}
-
-function startBattle(isBoss) {
-  const floorKey = game.currentMap; // dungeon1/2/3
-  let enemy;
-  if (isBoss) {
-    enemy = JSON.parse(JSON.stringify(ENEMIES.boss));
-  } else {
-    const pool = ENEMIES[floorKey] || ENEMIES.b1;
-    const tmpl = pool[rand(0, pool.length - 1)];
-    enemy = JSON.parse(JSON.stringify(tmpl));
-  }
+  const enemy = JSON.parse(JSON.stringify(tmpl));
+  enemy.maxHp = enemy.hp;
 
   battleState = {
-    enemy,
-    isBoss,
-    playerDefending: false,
-    enemyPoisoned: false,
-    enemyPoisonTurn: 0,
-    smokeUsed: false,
-    protectActive: false,
-    bossTurnCount: 0,
-    playerTurn: true,
-    ended: false,
+    enemy, kind, boss: kind !== 'normal',
+    playerDefending: false, enemyPoisoned: false, protectActive: false,
+    turn: 0, ended: false, busy: false,
   };
-
   game.inputEnabled = false;
 
-  // バトルUI表示
-  document.getElementById('battle-overlay').classList.remove('hidden');
-  document.getElementById('battle-header').textContent =
-    `[ ${enemy.name} が あらわれた！ ]`;
-  document.getElementById('battle-enemy-sprite').innerHTML = getEnemySpriteSVG(enemy);
-  document.getElementById('battle-enemy-name').textContent = enemy.name;
+  const ov = $('battle-overlay');
+  ov.classList.remove('hidden');
+  ov.dataset.floor = game.currentMap;
+  $('battle-window').classList.toggle('boss', battleState.boss);
+  $('battle-header').textContent = kind === 'boss' ? `[ ${enemy.name} ]` : `[ ${enemy.name} が あらわれた！ ]`;
+  const sprite = $('battle-enemy-sprite');
+  sprite.innerHTML = Art.enemySVG(enemy.type, battleState.boss ? 128 : 96);
+  sprite.classList.remove('dead');
+  $('battle-enemy-name').textContent = enemy.name;
   updateBattleEnemyHp();
-  document.getElementById('battle-status-msg').textContent = '';
-  document.getElementById('battle-turn-msg').textContent = 'あなたのターン';
-  document.getElementById('battle-log').innerHTML = '';
-
+  updateBattlePlayerBar();
+  $('battle-turn-msg').textContent = 'コマンド？';
+  $('battle-log').replaceChildren();
+  Sound.bgm(battleState.boss ? 'boss' : 'battle');
+  if (kind === 'boss') addBattleLog('「愚かな人間め…。姫は渡さぬ！」', '#ff6666');
+  if (kind === 'golem') addBattleLog('「ココ ヨリ サキ ニハ トオサヌ」', '#ff9966');
   showBattleMainCmd();
 }
 
 function updateBattleEnemyHp() {
   const e = battleState.enemy;
-  const maxHp = ENEMIES.boss && battleState.isBoss ? ENEMIES.boss.hp : e.maxHp || e.hp;
-  const ratio = e.hp / (e.maxHp || e.hp);
-  document.getElementById('battle-hp-fill').style.width = `${Math.max(0, ratio * 100)}%`;
-  document.getElementById('battle-hp-fill').style.background = hpColor(e.hp, e.maxHp || e.hp);
-  document.getElementById('battle-enemy-hp-num').textContent = e.hp;
+  const r = Math.max(0, e.hp / e.maxHp);
+  const fill = $('battle-hp-fill');
+  fill.style.width = `${r * 100}%`;
+  fill.style.background = hpColor(e.hp, e.maxHp);
+  $('battle-enemy-hp-num').textContent = `${Math.max(0, e.hp)}/${e.maxHp}`;
+  $('battle-status-msg').textContent = battleState.enemyPoisoned ? '[毒]' : '';
+}
+
+function updateBattlePlayerBar() {
+  const p = game.player;
+  const el = $('battle-player-bar');
+  el.innerHTML = `<span>${esc(p.name)}</span><span style="color:${hpColor(p.hp, p.maxHp)}">HP ${p.hp}/${p.maxHp}</span><span style="color:#8af">MP ${p.mp}/${getMaxMp(p)}</span>${p.poisoned ? '<span style="color:#f6f">毒</span>' : ''}${battleState && battleState.protectActive ? '<span style="color:#0af">守</span>' : ''}`;
 }
 
 function showBattleMainCmd() {
-  document.getElementById('battle-main-cmd').classList.remove('hidden');
-  document.getElementById('battle-sub-cmd').classList.add('hidden');
-  // まほうボタンの有効/無効
-  const hasMagic = game.player.spells.length > 0;
-  document.querySelector('[data-cmd="magic"]').disabled = !hasMagic;
-  // アイテムボタンの有効/無効
-  const hasItem = game.player.items.length > 0;
-  document.querySelector('[data-cmd="item"]').disabled = !hasItem;
-  // カーソルをバトルメインに設定
+  $('battle-main-cmd').classList.remove('hidden');
+  $('battle-sub-cmd').classList.add('hidden');
+  document.querySelector('[data-cmd="magic"]').disabled = game.player.spells.length === 0;
+  document.querySelector('[data-cmd="item"]').disabled = game.player.items.length === 0;
+  document.querySelector('[data-cmd="run"]').disabled = !!(battleState && battleState.boss);
   setCursorContext('battle_main');
 }
 
 function addBattleLog(text, color) {
-  const logEl = document.getElementById('battle-log');
+  const log = $('battle-log');
   const line = document.createElement('div');
   line.textContent = text;
   if (color) line.style.color = color;
-  logEl.appendChild(line);
-  logEl.scrollTop = logEl.scrollHeight;
+  log.appendChild(line);
+  while (log.children.length > 6) log.firstChild.remove();
+  log.scrollTop = log.scrollHeight;
 }
 
-// バトルコマンドハンドラ
 function onBattleCommand(cmd) {
-  if (!battleState || battleState.ended || !battleState.playerTurn) return;
-
-  switch (cmd) {
-    case 'attack':  playerAttack();  break;
-    case 'magic':   openMagicSubMenu(); break;
-    case 'item':    openItemSubMenu();  break;
-    case 'defend':  playerDefend();  break;
-    case 'run':     playerRun();     break;
-  }
+  if (!battleState || battleState.ended || battleState.busy) return;
+  Sound.sfx('select');
+  if (cmd === 'attack') playerAttack();
+  else if (cmd === 'magic') openMagicSubMenu();
+  else if (cmd === 'item') openItemSubMenu();
+  else if (cmd === 'defend') playerDefend();
+  else if (cmd === 'run') playerRun();
 }
 
-// 通常攻撃
+function physDamage(atk, def) {
+  return Math.max(1, Math.round((atk - def / 2) * (0.85 + Math.random() * 0.3)));
+}
+
+function damageEnemy(dmg, color, sfx) {
+  const e = battleState.enemy;
+  e.hp -= dmg;
+  Sound.sfx(sfx || 'hit');
+  shake('battle-enemy-sprite');
+  popNumber(dmg, color || 'pop-enemy', 'battle-enemy-area');
+  updateBattleEnemyHp();
+  if (e.hp <= 0) { e.hp = 0; endBattleWin(); return true; }
+  return false;
+}
+
 function playerAttack() {
   const p = game.player;
   const e = battleState.enemy;
-  const atk = getAtk(p);
-  const def = e.def;
-  const base = Math.max(1, atk - def);
-  const dmg = Math.max(1, Math.round(base * (0.8 + Math.random() * 0.4)));
-
-  e.hp -= dmg;
-  addBattleLog(`${p.name} の攻撃！ ${e.name}に ${dmg}ダメージ！`, '#fff');
-  updateBattleEnemyHp();
-
-  if (e.hp <= 0) {
-    e.hp = 0;
-    endBattleWin();
-    return;
-  }
-  enemyTurn();
+  const crit = Math.random() < 1 / 16;
+  let dmg = physDamage(getAtk(p), e.def);
+  if (crit) dmg = Math.round(dmg * 1.8);
+  addBattleLog(crit ? `会心の一撃！ ${e.name}に ${dmg}ダメージ！` : `${p.name}の攻撃！ ${e.name}に ${dmg}ダメージ！`, crit ? '#ffd700' : '#fff');
+  if (damageEnemy(dmg, crit ? 'pop-crit' : 'pop-enemy', crit ? 'crit' : 'hit')) return;
+  enemyTurnLater();
 }
 
-// 魔法サブメニュー
 function openMagicSubMenu() {
   const p = game.player;
-  document.getElementById('battle-main-cmd').classList.add('hidden');
-  document.getElementById('battle-sub-cmd').classList.remove('hidden');
-  document.getElementById('sub-cmd-title').textContent = 'どの魔法を使う？';
-
-  const list = document.getElementById('sub-cmd-list');
-  list.innerHTML = '';
+  $('battle-main-cmd').classList.add('hidden');
+  $('battle-sub-cmd').classList.remove('hidden');
+  $('sub-cmd-title').textContent = 'どの魔法を使う？';
+  const list = $('sub-cmd-list');
+  list.replaceChildren();
   for (const sid of p.spells) {
     const sp = SPELLS[sid];
-    const btn = document.createElement('button');
-    btn.className = 'battle-btn';
-    btn.textContent = `${sp.name} (MP:${sp.mp}) - ${sp.desc}`;
-    btn.disabled = p.mp < sp.mp;
-    btn.addEventListener('click', () => useMagic(sid));
-    list.appendChild(btn);
+    const b = document.createElement('button');
+    b.className = 'battle-btn';
+    b.textContent = `${sp.name} (MP${sp.mp}) ${sp.desc}`;
+    b.disabled = p.mp < sp.mp;
+    b.addEventListener('click', () => useMagic(sid));
+    list.appendChild(b);
   }
-  // カーソルをサブメニューに設定
   setCursorContext('battle_sub');
 }
 
-// アイテムサブメニュー
 function openItemSubMenu() {
   const p = game.player;
-  document.getElementById('battle-main-cmd').classList.add('hidden');
-  document.getElementById('battle-sub-cmd').classList.remove('hidden');
-  document.getElementById('sub-cmd-title').textContent = 'どのアイテムを使う？';
-
-  const list = document.getElementById('sub-cmd-list');
-  list.innerHTML = '';
-  for (const item of p.items) {
-    const cons = CONSUMABLES[item.id];
-    const btn = document.createElement('button');
-    btn.className = 'battle-btn';
-    btn.textContent = `${cons.name} x${item.count} - ${cons.desc}`;
-    btn.addEventListener('click', () => useItem(item.id));
-    list.appendChild(btn);
+  $('battle-main-cmd').classList.add('hidden');
+  $('battle-sub-cmd').classList.remove('hidden');
+  $('sub-cmd-title').textContent = 'どの道具を使う？';
+  const list = $('sub-cmd-list');
+  list.replaceChildren();
+  for (const it of p.items) {
+    const c = CONSUMABLES[it.id];
+    const b = document.createElement('button');
+    b.className = 'battle-btn';
+    b.textContent = `${c.name} x${it.count}  ${c.desc}`;
+    b.addEventListener('click', () => useItemInBattle(it.id));
+    list.appendChild(b);
   }
-  // カーソルをサブメニューに設定
   setCursorContext('battle_sub');
 }
 
-// 魔法使用
-function useMagic(spellId) {
+function spellPower(sid, p) {
+  const lv = p.lv;
+  switch (sid) {
+    case 'fire': return Math.round((16 + lv * 3 + rand(0, 8)) * magicMul(p));
+    case 'blizzard': return Math.round((22 + lv * 4 + rand(0, 8)) * magicMul(p));
+    case 'thunder': return Math.round((32 + lv * 5 + rand(0, 10)) * magicMul(p));
+    case 'holy': return Math.round((18 + lv * 3 + rand(0, 6)) * magicMul(p));
+    case 'heal': return 22 + lv * 4 + rand(0, 6);
+    case 'fullheal': return 60 + lv * 8 + rand(0, 10);
+    default: return 0;
+  }
+}
+
+function useMagic(sid) {
   const p = game.player;
   const e = battleState.enemy;
-  const sp = SPELLS[spellId];
-
+  const sp = SPELLS[sid];
+  if (p.mp < sp.mp) return;
   p.mp -= sp.mp;
   showBattleMainCmd();
-
-  let logText = '';
-  let logColor = '#aaf';
+  updateBattlePlayerBar();
 
   switch (sp.type) {
     case 'attack': {
-      let dmg;
-      if (spellId === 'fire') {
-        // DEF無視
-        const base = 25 + rand(0, 10);
-        const magicBonus = 1 + WEAPONS[p.weapon].magicBonus;
-        dmg = Math.round(base * magicBonus);
-      } else if (spellId === 'blizzard') {
-        const base = Math.max(1, 20 + rand(0, 10) - e.def);
-        const magicBonus = 1 + WEAPONS[p.weapon].magicBonus;
-        dmg = Math.round(base * magicBonus);
-      } else if (spellId === 'thunder') {
-        const base = 35 + rand(0, 15);
-        const magicBonus = 1 + WEAPONS[p.weapon].magicBonus;
-        dmg = Math.round(base * magicBonus);
-      } else {
-        dmg = 20;
-      }
-      e.hp -= dmg;
-      logText = `${sp.name}！ ${e.name}に ${dmg}ダメージ！`;
-      updateBattleEnemyHp();
-      if (e.hp <= 0) { e.hp = 0; endBattleWin(); return; }
+      let dmg = spellPower(sid, p);
+      if (sid === 'blizzard') dmg = Math.max(1, dmg - Math.floor(e.def / 2));
+      if (sid === 'holy' && e.undead) dmg *= 2;
+      if (battleState.boss) dmg = Math.round(dmg * 0.65); // 門番と竜は魔法に強い
+      flashScreen(sp.fx);
+      addBattleLog(`${sp.name}！ ${e.name}に ${dmg}ダメージ！`, '#aaf');
+      if (damageEnemy(dmg, 'pop-magic', sp.fx)) return;
       break;
     }
     case 'heal': {
-      let amount;
-      if (spellId === 'heal') {
-        amount = rand(20, 30);
-      } else if (spellId === 'fullheal') {
-        amount = rand(60, 80);
-      } else {
-        amount = 20;
-      }
-      p.hp = Math.min(p.maxHp, p.hp + amount);
-      logText = `${sp.name}！ HPが ${amount}回復した！`;
-      logColor = '#0f0';
-      updateStatusPanel();
+      const amt = Math.min(p.maxHp - p.hp, spellPower(sid, p));
+      p.hp += amt;
+      Sound.sfx('heal');
+      flashScreen('heal');
+      popNumber('+' + amt, 'pop-heal', 'battle-player-bar');
+      addBattleLog(`${sp.name}！ HPが${amt}回復した！`, '#0f0');
       break;
     }
-    case 'buff': {
-      if (spellId === 'protect') {
-        battleState.protectActive = true;
-        logText = `${sp.name}！ 次の攻撃への防御が強化された！`;
-        logColor = '#0af';
-      }
+    case 'buff':
+      battleState.protectActive = true;
+      Sound.sfx('buff');
+      addBattleLog(`${sp.name}！ 光の盾が身を包んだ！`, '#0af');
       break;
-    }
-    case 'debuff': {
-      if (spellId === 'poison' && !battleState.enemyPoisoned) {
+    case 'debuff':
+      Sound.sfx('poison');
+      if (!battleState.enemyPoisoned && e.type !== 'golem') {
         battleState.enemyPoisoned = true;
-        logText = `${sp.name}！ ${e.name}は毒状態になった！`;
-        logColor = '#a0f';
-      } else {
-        logText = `${sp.name}！ しかし効果がなかった...`;
-      }
+        addBattleLog(`${sp.name}！ ${e.name}は毒に侵された！`, '#a0f');
+      } else addBattleLog(`${sp.name}！ しかし効かなかった…`, '#888');
+      updateBattleEnemyHp();
       break;
-    }
-    case 'escape': {
-      if (spellId === 'smoke') {
-        if (!battleState.isBoss) {
-          addBattleLog('スモーク！ 煙に紛れて逃げ出した！', '#aaa');
-          endBattleEscape();
-          return;
-        } else {
-          logText = 'スモーク！ しかしボスには効かなかった！';
-        }
+    case 'escape':
+      if (!battleState.boss) {
+        Sound.sfx('run');
+        addBattleLog('スモーク！ 煙に紛れて逃げ出した！', '#aaa');
+        endBattleEscape();
+        return;
       }
+      addBattleLog('スモーク！ しかし逃げられない！', '#f66');
       break;
-    }
   }
-
-  addBattleLog(logText, logColor);
-  enemyTurn();
+  updateBattlePlayerBar();
+  updateStatusPanel();
+  enemyTurnLater();
 }
 
-// アイテム使用（バトル中）
-function useItem(itemId) {
+function applyItemEffect(id, inBattle) {
   const p = game.player;
-  const e = battleState.enemy;
-  const cons = CONSUMABLES[itemId];
-
-  showBattleMainCmd();
-  consumeItem(p, itemId);
-
-  let logText = '';
-  let logColor = '#0f0';
-
-  switch (cons.effect) {
-    case 'heal_20':
-      p.hp = Math.min(p.maxHp, p.hp + 20);
-      logText = `薬草を使った！ HPが20回復した！`;
-      break;
-    case 'heal_50':
-      p.hp = Math.min(p.maxHp, p.hp + 50);
-      logText = `上薬草を使った！ HPが50回復した！`;
-      break;
-    case 'holy':
-      if (e.type === 'undead') {
-        const dmg = rand(60, 80);
-        e.hp -= dmg;
-        logText = `聖水！ ${e.name}に ${dmg}の大ダメージ！`;
-        updateBattleEnemyHp();
-        if (e.hp <= 0) { e.hp = 0; endBattleWin(); return; }
-      } else {
-        logText = '聖水を使った！ しかし効果がなかった...';
-        logColor = '#888';
-      }
-      break;
+  const c = CONSUMABLES[id];
+  switch (c.effect) {
+    case 'heal': {
+      const amt = Math.min(p.maxHp - p.hp, c.power);
+      p.hp += amt;
+      Sound.sfx('heal');
+      if (inBattle) popNumber('+' + amt, 'pop-heal', 'battle-player-bar');
+      return `${c.name}を使った。HPが${amt}回復した！`;
+    }
+    case 'mp': {
+      const amt = Math.min(getMaxMp(p) - p.mp, c.power);
+      p.mp += amt;
+      Sound.sfx('heal');
+      return `${c.name}を使った。MPが${amt}回復した！`;
+    }
     case 'antidote':
       p.poisoned = false;
-      logText = '毒消し草を使った！ 毒が治った！';
-      break;
-    case 'mp_10':
-      p.mp = Math.min(getMaxMp(p), p.mp + 10);
-      logText = 'エーテルを使った！ MPが10回復した！';
-      logColor = '#aaf';
-      break;
-  }
-
-  addBattleLog(logText, logColor);
-  updateStatusPanel();
-  enemyTurn();
-}
-
-// アイテムを消費
-function consumeItem(player, itemId) {
-  const idx = player.items.findIndex(i => i.id === itemId);
-  if (idx === -1) return;
-  player.items[idx].count--;
-  if (player.items[idx].count <= 0) {
-    player.items.splice(idx, 1);
+      Sound.sfx('heal');
+      return `${c.name}を使った。毒が消えた！`;
+    default: return '';
   }
 }
 
-// アイテムを追加
-function addItem(player, itemId, count = 1) {
-  const existing = player.items.find(i => i.id === itemId);
-  if (existing) {
-    existing.count += count;
+function useItemInBattle(id) {
+  const p = game.player;
+  const e = battleState.enemy;
+  const c = CONSUMABLES[id];
+  showBattleMainCmd();
+  consumeItem(p, id);
+  if (c.effect === 'holy') {
+    if (e.undead) {
+      const dmg = rand(80, 110);
+      flashScreen('holy');
+      addBattleLog(`聖水を浴びせた！ ${e.name}に ${dmg}の大ダメージ！`, '#ffd');
+      if (damageEnemy(dmg, 'pop-magic', 'holy')) return;
+    } else addBattleLog('聖水を浴びせた！ しかし効果がない…', '#888');
   } else {
-    const total = player.items.reduce((s, i) => s + i.count, 0);
-    if (total < CONFIG.MAX_ITEMS) {
-      player.items.push({ id: itemId, count });
-    } else {
-      return false; // 満杯
-    }
+    addBattleLog(applyItemEffect(id, true), '#0f0');
   }
+  updateBattlePlayerBar();
+  updateStatusPanel();
+  showBattleMainCmd();
+  enemyTurnLater();
+}
+
+function consumeItem(p, id) {
+  const i = p.items.findIndex(x => x.id === id);
+  if (i < 0) return;
+  p.items[i].count--;
+  if (p.items[i].count <= 0) p.items.splice(i, 1);
+}
+
+function addItem(p, id, count = 1) {
+  const total = p.items.reduce((s, i) => s + i.count, 0);
+  if (total + count > CONFIG.MAX_ITEMS) return false;
+  const ex = p.items.find(i => i.id === id);
+  if (ex) ex.count += count;
+  else p.items.push({ id, count });
   return true;
 }
 
-// ぼうぎょ
 function playerDefend() {
   battleState.playerDefending = true;
-  if (battleState.protectActive) {
-    battleState.protectActive = false;
-  }
-  addBattleLog(`${game.player.name} はぼうぎょ態勢に入った！`, '#aaa');
-  enemyTurn();
+  addBattleLog(`${game.player.name}は身を守っている。`, '#aaa');
+  enemyTurnLater();
 }
 
-// 逃走
 function playerRun() {
-  if (battleState.isBoss) {
-    addBattleLog('ボスから逃げることはできない！', '#f66');
-    return;
-  }
-
+  if (battleState.boss) { addBattleLog('逃げられない！', '#f66'); return; }
   const p = game.player;
-  const armorEscapeBonus = ARMORS[p.armor].escapeBonus;
-  const weaponEscapeBonus = WEAPONS[p.weapon].escapeBonus;
-  let rate = JOBS[p.job].label === 'thief'
-    ? CONFIG.ESCAPE_RATE_THIEF
-    : CONFIG.ESCAPE_RATE_NORMAL;
-  rate += armorEscapeBonus + weaponEscapeBonus;
-  rate = clamp(rate, 0, 1);
-
+  let rate = p.job === 'thief' ? CONFIG.ESCAPE_RATE_THIEF : CONFIG.ESCAPE_RATE_NORMAL;
+  rate = clamp(rate + ARMORS[p.armor].escapeBonus + WEAPONS[p.weapon].escapeBonus, 0, 1);
   if (Math.random() < rate) {
+    Sound.sfx('run');
     addBattleLog('うまく逃げ出した！', '#aaa');
     endBattleEscape();
   } else {
-    addBattleLog('しかし逃げられなかった！', '#f66');
-    enemyTurn();
+    addBattleLog('しかし回り込まれた！', '#f66');
+    enemyTurnLater();
   }
 }
 
-// 敵のターン
-function enemyTurn() {
-  if (!battleState || battleState.ended) return;
+function enemyTurnLater() {
+  battleState.busy = true;
+  setTimeout(() => { if (battleState && !battleState.ended) enemyTurn(); }, 450);
+}
 
+function enemyTurn() {
   const p = game.player;
   const e = battleState.enemy;
-  battleState.bossTurnCount++;
+  const bs = battleState;
+  bs.turn++;
 
-  // 毒ダメージ（敵）
-  if (battleState.enemyPoisoned) {
-    const poisonDmg = Math.max(1, Math.floor((e.maxHp || e.hp) * 0.05));
-    e.hp -= poisonDmg;
-    addBattleLog(`${e.name}は毒のダメージを受けた！ ${poisonDmg}ダメージ`, '#a0f');
+  if (bs.enemyPoisoned) {
+    const pd = Math.max(1, Math.floor(e.maxHp * 0.06));
+    addBattleLog(`${e.name}は毒で ${pd}ダメージを受けた！`, '#a0f');
+    e.hp -= pd;
+    popNumber(pd, 'pop-poison', 'battle-enemy-area');
     updateBattleEnemyHp();
-    if (e.hp <= 0) {
-      e.hp = 0;
-      endBattleWin();
-      return;
-    }
+    if (e.hp <= 0) { e.hp = 0; endBattleWin(); return; }
   }
 
-  // ボス特殊攻撃（3ターンに1回）
   let dmg;
-  if (battleState.isBoss && battleState.bossTurnCount % 3 === 0) {
-    const base = rand(40, 60);
-    dmg = battleState.playerDefending ? Math.floor(base * 0.5) : base;
-    if (battleState.protectActive) { dmg = Math.floor(dmg * 0.5); battleState.protectActive = false; }
-    addBattleLog(`ヴォルガンの炎ブレス！！ ${dmg}の大ダメージ！`, '#ff4400');
+  if (e.special === 'breath' && bs.turn % 3 === 0) {
+    dmg = rand(50, 72);
+    flashScreen('fire');
+    Sound.sfx('fire');
+    addBattleLog(`ヴォルガンは灼熱の炎を吐いた！`, '#ff4400');
+  } else if (e.special === 'spell' && Math.random() < 0.35) {
+    dmg = Math.round(e.atk * (0.7 + Math.random() * 0.3));
+    flashScreen('thunder');
+    Sound.sfx('thunder');
+    addBattleLog(`${e.name}は呪文を唱えた！`, '#f8f');
+  } else if (e.type === 'golem' && bs.turn % 4 === 0) {
+    dmg = Math.round(physDamage(e.atk, getDef(p)) * 1.8);
+    addBattleLog('ゴーレムは大きく腕を振り下ろした！', '#f96');
   } else {
-    // 通常攻撃
-    const base = Math.max(1, e.atk - getDef(p));
-    const raw = Math.max(1, Math.round(base * (0.8 + Math.random() * 0.4)));
-    dmg = battleState.playerDefending ? Math.floor(raw * 0.5) : raw;
-    if (battleState.protectActive) { dmg = Math.floor(dmg * 0.5); battleState.protectActive = false; }
-    addBattleLog(`${e.name}の攻撃！ ${p.name}に ${dmg}ダメージ！`, '#f88');
+    dmg = physDamage(e.atk, getDef(p));
+    addBattleLog(`${e.name}の攻撃！`, '#f88');
   }
+  if (bs.playerDefending) dmg = Math.floor(dmg * 0.5);
+  if (bs.protectActive) { dmg = Math.floor(dmg * 0.5); bs.protectActive = false; }
+  dmg = Math.max(1, dmg);
+  p.hp -= dmg;
+  addBattleLog(`${p.name}は ${dmg}のダメージを受けた！`, '#f88');
+  Sound.sfx('hurt');
+  shake('battle-window');
+  flashScreen('damage');
+  popNumber(dmg, 'pop-player', 'battle-player-bar');
 
-  // 毒ヘビ特殊：毒状態にする
   if (e.special === 'poison' && !p.poisoned && Math.random() < 0.3) {
     p.poisoned = true;
     addBattleLog(`${p.name}は毒を受けた！`, '#a0f');
   }
-
-  p.hp -= dmg;
-  battleState.playerDefending = false;
+  bs.playerDefending = false;
 
   if (p.hp <= 0) {
     p.hp = 0;
+    updateBattlePlayerBar();
     updateStatusPanel();
     endBattleLose();
     return;
   }
-
+  bs.busy = false;
+  updateBattlePlayerBar();
   updateStatusPanel();
-
-  // プレイヤーのターンに戻す
-  document.getElementById('battle-turn-msg').textContent = 'あなたのターン';
+  $('battle-turn-msg').textContent = 'コマンド？';
   showBattleMainCmd();
-
-  // マップをフラッシュ
-  const mapArea = document.getElementById('map-area');
-  mapArea.classList.add('flash-damage');
-  setTimeout(() => mapArea.classList.remove('flash-damage'), 300);
 }
 
-// 勝利
 function endBattleWin() {
   if (battleState.ended) return;
-  battleState.ended = true;
+  const bs = battleState;
+  bs.ended = true;
   cursor.context = null;
-  const e = battleState.enemy;
+  const e = bs.enemy;
   const p = game.player;
-  const isBoss = battleState.isBoss;
-
   p.exp += e.exp;
   p.gold += e.gold;
-
+  game.stats.kills++;
+  $('battle-enemy-sprite').classList.add('dead');
+  Sound.bgm(null);
+  Sound.sfx('win');
   addBattleLog(`${e.name}を倒した！`, '#ffd700');
-  addBattleLog(`EXP +${e.exp}  ペリカ +${e.gold}`, '#ffd700');
+  addBattleLog(`経験値 ${e.exp}  ${e.gold}ペリカ を手に入れた`, '#ffd700');
 
-  if (isBoss) {
+  if (bs.kind === 'golem') game.flags.golemDefeated = true;
+  if (bs.kind === 'boss') {
     game.flags.bossDefeated = true;
-    // ボスタイルを床に変更
-    const mapData = game.maps[game.currentMap];
-    mapData.grid[p.y][p.x] = TILE.FLOOR;
-    addBattleLog('暗黒竜ヴォルガンを倒した！ 宝箱が現れた！', '#ff0');
+    setCell(TILE.FLOOR);
   }
-
-  // レベルアップ確認
-  checkLevelUp();
+  const leveled = checkLevelUp();
   updateStatusPanel();
 
   setTimeout(() => {
-    document.getElementById('battle-overlay').classList.add('hidden');
-    game.inputEnabled = true;
+    $('battle-overlay').classList.add('hidden');
     battleState = null;
-    renderMap();
-    updateStatusPanel();
-    if (isBoss) {
-      addMessage('ボスを倒した！ 宝箱を手に入れよう！', '#ffd700');
+    game.inputEnabled = true;
+    playMapBgm();
+    renderAll();
+    if (bs.kind === 'boss') {
+      openDialog('[ 竜を討ち倒した！ ]', '暗黒竜ヴォルガンは崩れ落ちた…<br>竜の魔力が消え、牢の扉と秘宝の封印が解けた！<br><br><span style="color:#0af">近くの牢から姫を救い出そう。</span>');
+    } else if (bs.kind === 'golem') {
+      addMessage('門番を倒した！ もう一度階段を踏むと下へ降りられる。', '#ffd700');
     } else {
-      addMessage(`${e.name}を倒した！ EXP+${e.exp} G+${e.gold}`, '#ffd700');
+      addMessage(`${e.name}を倒した！ EXP+${e.exp} ${e.gold}P`, '#ffd700');
     }
-  }, 1500);
+    if (leveled) addMessage(`レベルが ${p.lv} に上がった！`, '#ffd700');
+  }, leveled ? 1900 : 1300);
 }
 
-// 逃走成功
 function endBattleEscape() {
-  if (battleState.ended) return;
   battleState.ended = true;
   cursor.context = null;
   setTimeout(() => {
-    document.getElementById('battle-overlay').classList.add('hidden');
-    game.inputEnabled = true;
+    $('battle-overlay').classList.add('hidden');
     battleState = null;
-    addMessage('逃げ出した！');
-    renderMap();
-  }, 800);
+    game.inputEnabled = true;
+    playMapBgm();
+    addMessage('うまく逃げ切った。');
+    renderAll();
+  }, 700);
 }
 
-// 敗北
 function endBattleLose() {
-  if (battleState.ended) return;
   battleState.ended = true;
   cursor.context = null;
-  addBattleLog(`${game.player.name}は力尽きた...`, '#ff3333');
-  document.querySelector('[data-cmd="attack"]').disabled = true;
-  document.querySelector('[data-cmd="magic"]').disabled = true;
-  document.querySelector('[data-cmd="item"]').disabled = true;
-  document.querySelector('[data-cmd="defend"]').disabled = true;
-  document.querySelector('[data-cmd="run"]').disabled = true;
-
+  addBattleLog(`${game.player.name}は力尽きた…`, '#ff3333');
+  document.querySelectorAll('#battle-main-cmd .battle-btn').forEach(b => { b.disabled = true; });
+  Sound.bgm(null);
   setTimeout(() => {
-    document.getElementById('battle-overlay').classList.add('hidden');
+    $('battle-overlay').classList.add('hidden');
     battleState = null;
     triggerGameOver();
-  }, 1500);
+  }, 1600);
 }
 
-// =============================
-// レベルアップ
-// =============================
 function checkLevelUp() {
   const p = game.player;
+  let up = false;
   while (p.exp >= p.expNext && p.lv < CONFIG.MAX_LV) {
     p.exp -= p.expNext;
     p.lv++;
-    p.expNext = p.lv * 100;
-
-    const growth = JOBS[p.job].growth;
-    p.maxHp += growth.hp;
-    p.maxMp += growth.mp;
-    p.baseAtk += growth.atk;
-    p.baseDef += growth.def;
-    p.hp = p.maxHp; // レベルアップでHP全回復
+    p.expNext = expNeeded(p.lv);
+    const g = JOBS[p.job].growth;
+    p.maxHp += g.hp + rand(0, 2);
+    p.maxMp += g.mp;
+    p.baseAtk += g.atk;
+    p.baseDef += g.def;
+    p.hp = p.maxHp;
     p.mp = getMaxMp(p);
-
-    addBattleLog(`レベルアップ！ LV ${p.lv} になった！`, '#ffd700');
-    addMessage(`LV UP！ ${p.lv}になった！`, '#ffd700');
+    up = true;
+    if (battleState) addBattleLog(`レベルアップ！ LV ${p.lv} になった！`, '#ffd700');
   }
+  if (up) {
+    setTimeout(() => { Sound.sfx('levelup'); flashScreen('gold'); }, 500);
+  }
+  return up;
 }
 
 // =============================
-// ショップシステム
+// 店・会話（共通のウィンドウ）
 // =============================
-function openShop(titleText, contentHtml) {
+function openShop(title, html) {
   game.inputEnabled = false;
-  document.getElementById('shop-title').textContent = titleText;
-  document.getElementById('shop-content').innerHTML = contentHtml;
-  document.getElementById('shop-overlay').classList.remove('hidden');
-  // カーソルをショップに設定（DOMが確定後に反映）
+  $('shop-title').textContent = title;
+  $('shop-content').innerHTML = html;
+  $('shop-overlay').classList.remove('hidden');
   setTimeout(() => setCursorContext('shop'), 0);
 }
 
 function closeShop() {
   cursor.context = null;
-  document.getElementById('shop-overlay').classList.add('hidden');
+  $('shop-overlay').classList.add('hidden');
   game.inputEnabled = true;
   updateStatusPanel();
+  if (game.pendingEnding) { game.pendingEnding = false; triggerEnding(); }
 }
 
-// 宿屋
+function openDialog(title, html) {
+  openShop(title, `<div class="dialog-text">${html}</div>`);
+}
+
+function goldLine() { return `<div class="shop-gold-info">所持金: ${game.player.gold} ペリカ</div>`; }
+
+function openCastle() {
+  const f = game.flags;
+  if (f.princessRescued) {
+    Sound.sfx('door');
+    game.pendingEnding = true;
+    openDialog('[ 城 ]', '王「おお…姫！ よくぞ無事で…！」<br>王の目に、涙が光った。');
+    return;
+  }
+  let text = '王「よく来た、旅の者よ。<br>わが娘ミレーユ姫が、暗黒竜ヴォルガンにさらわれてしまった。<br>竜は南の謎の洞窟、その最深部に棲むという…。<br>どうか姫を救い出してくれ！」';
+  if (f.bossDefeated) text = '王「竜を倒したと…!? ならば姫は牢の中じゃ！ 早く連れ帰ってくれ！」';
+  else if (f.golemDefeated) text = '王「B3Fの門番を倒したか。竜はさらに奥、B5Fじゃ。<br>B4Fのどこかに、伝説の武器が眠っているとも聞く…」';
+  else if (game.player.lv >= 4) text += '<br><br>大臣「B3Fには石の門番がいるとか。十分に鍛えてから挑まれよ」';
+  openDialog('[ 城 ]', text);
+}
+
 function openInn() {
-  const cost = game.player.lv * 10;
-  const content = `
-    <div style="color:#ccc; margin-bottom:12px;">宿屋へようこそ！ 一泊 ${cost} ペリカ です。</div>
-    <div class="shop-gold-info">所持金: ${game.player.gold} ペリカ</div>
-    <div style="margin-top:12px; display:flex; gap:8px;">
+  const cost = game.player.lv * 8;
+  openShop('[ 宿屋 ]', `
+    <div class="dialog-text">宿屋へようこそ！ 一泊 ${cost} ペリカ です。</div>
+    ${goldLine()}
+    <div class="shop-row-btns">
       <button class="shop-btn" id="btn-inn-stay" ${game.player.gold < cost ? 'disabled' : ''}>泊まる (${cost}P)</button>
       <button class="shop-btn" id="btn-inn-cancel">やめる</button>
-    </div>
-  `;
-  openShop('[ 宿屋 ]', content);
-
-  document.getElementById('btn-inn-stay')?.addEventListener('click', () => {
-    game.player.gold -= cost;
-    game.player.hp = game.player.maxHp;
-    game.player.mp = getMaxMp(game.player);
-    game.player.poisoned = false;
+    </div>`);
+  $('btn-inn-stay')?.addEventListener('click', () => {
+    const p = game.player;
+    p.gold -= cost;
+    p.hp = p.maxHp; p.mp = getMaxMp(p); p.poisoned = false;
+    Sound.sfx('heal');
     closeShop();
-    addMessage('ゆっくりと休んだ。HP・MPが全回復した！', '#00ff41');
+    flashScreen('heal');
+    addMessage('ぐっすり眠った。HP・MPが全回復した！', '#00ff41');
   });
-  document.getElementById('btn-inn-cancel').addEventListener('click', closeShop);
+  $('btn-inn-cancel').addEventListener('click', closeShop);
 }
 
-// 魔法ショップ
 function openMagicShop() {
   const p = game.player;
-  let rows = '<div class="shop-section-title">習得可能な魔法</div>';
-  let any = false;
-
-  for (const entry of MAGIC_SHOP_LIST) {
-    const sp = SPELLS[entry.id];
-    const owned = p.spells.includes(entry.id);
-    const canAfford = p.gold >= entry.price;
-    const disabled = owned || !canAfford;
-    const label = owned ? '習得済み' : `${entry.price}P`;
-    rows += `
-      <div class="shop-item-row ${disabled ? 'disabled' : ''}">
-        <span class="shop-item-name">${sp.name}</span>
-        <span class="shop-item-desc">${sp.desc}</span>
-        <span class="shop-item-price">${label}</span>
-        <button class="shop-btn" data-buy-spell="${entry.id}" ${disabled ? 'disabled' : ''}>購入</button>
-      </div>`;
-    if (!owned) any = true;
+  let rows = '<div class="shop-section-title">魔法を習う</div>';
+  for (const ent of MAGIC_SHOP_LIST) {
+    const sp = SPELLS[ent.id];
+    const can = sp.jobs.includes(p.job);
+    const owned = p.spells.includes(ent.id);
+    const dis = !can || owned || p.gold < ent.price;
+    const label = owned ? '習得済' : !can ? '職業×' : `${ent.price}P`;
+    rows += `<div class="shop-item-row ${dis ? 'disabled' : ''}">
+      <span class="shop-item-name">${sp.name}<small>${sp.desc}</small></span>
+      <span class="shop-item-price">${label}</span>
+      <button class="shop-btn" data-buy-spell="${ent.id}" ${dis ? 'disabled' : ''}>習う</button></div>`;
   }
-  if (!any) rows += '<div style="color:#666; margin-top:8px;">購入できる魔法がありません。</div>';
-
-  rows += `<div class="shop-gold-info" style="margin-top:8px;">所持金: ${p.gold} ペリカ</div>`;
-  openShop('[ 魔法ショップ ]', rows);
-
-  document.querySelectorAll('[data-buy-spell]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const sid = btn.dataset.buySpell;
-      const price = MAGIC_SHOP_LIST.find(e => e.id === sid).price;
-      p.gold -= price;
-      p.spells.push(sid);
-      addMessage(`${SPELLS[sid].name}を習得した！`, '#aaf');
-      openMagicShop(); // 更新
-    });
-  });
+  openShop('[ 魔法屋 ]', rows + goldLine());
+  document.querySelectorAll('[data-buy-spell]').forEach(b => b.addEventListener('click', () => {
+    const sid = b.dataset.buySpell;
+    p.gold -= MAGIC_SHOP_LIST.find(e => e.id === sid).price;
+    p.spells.push(sid);
+    Sound.sfx('coin');
+    addMessage(`${SPELLS[sid].name}を習得した！`, '#aaf');
+    openMagicShop();
+  }));
 }
 
-// 武器屋
-function openWeaponShop() {
+function openEquipShop(type) {
   const p = game.player;
-  let rows = buildEquipRows(WEAPON_SHOP_LIST, WEAPONS, 'weapon');
-  rows += buildSellRows(p, 'weapon');
-  rows += `<div class="shop-gold-info" style="margin-top:8px;">所持金: ${p.gold} ペリカ</div>`;
-  openShop('[ 武器屋 ]', rows);
-  bindEquipShopEvents(WEAPON_SHOP_LIST, WEAPONS, 'weapon', openWeaponShop);
-}
-
-// 防具屋
-function openArmorShop() {
-  const p = game.player;
-  let rows = buildEquipRows(ARMOR_SHOP_LIST, ARMORS, 'armor');
-  rows += buildSellRows(p, 'armor');
-  rows += `<div class="shop-gold-info" style="margin-top:8px;">所持金: ${p.gold} ペリカ</div>`;
-  openShop('[ 防具屋 ]', rows);
-  bindEquipShopEvents(ARMOR_SHOP_LIST, ARMORS, 'armor', openArmorShop);
-}
-
-function buildEquipRows(list, catalog, type) {
-  const p = game.player;
-  let rows = `<div class="shop-section-title">購入</div>`;
-  for (const id of list) {
-    const item = catalog[id];
-    const canEquip = item.jobs.includes(p.job);
-    const canAfford = p.gold >= item.price;
-    const disabled = !canEquip || !canAfford;
-    const stat = type === 'weapon' ? `ATK+${item.atk}` : `DEF+${item.def}`;
-    rows += `
-      <div class="shop-item-row ${disabled ? 'disabled' : ''}">
-        <span class="shop-item-name">${item.name}</span>
-        <span class="shop-item-desc">${stat}</span>
-        <span class="shop-item-price">${item.price}P</span>
-        <button class="shop-btn" data-buy-equip="${id}" data-equip-type="${type}" ${disabled ? 'disabled' : ''}>購入</button>
-      </div>`;
-  }
-  return rows;
-}
-
-function buildSellRows(p, type) {
-  let rows = `<div class="shop-section-title">売却</div>`;
   const catalog = type === 'weapon' ? WEAPONS : ARMORS;
-  const currentKey = type === 'weapon' ? p.weapon : p.armor;
-  const item = catalog[currentKey];
-  const sellPrice = item.sell;
-  if (sellPrice === 0) {
-    rows += `<div class="shop-item-row disabled"><span class="shop-item-name">${item.name}</span><span style="color:#666">売れない</span></div>`;
-  } else {
-    rows += `
-      <div class="shop-item-row">
-        <span class="shop-item-name">${item.name}</span>
-        <span class="shop-item-price">${sellPrice}P</span>
-        <button class="shop-btn" data-sell-equip="${currentKey}" data-equip-type="${type}">売る</button>
-      </div>`;
+  const list = type === 'weapon' ? WEAPON_SHOP_LIST : ARMOR_SHOP_LIST;
+  const cur = type === 'weapon' ? p.weapon : p.armor;
+  let rows = `<div class="shop-section-title">買う（いまの装備: ${catalog[cur].name}）</div>`;
+  for (const id of list) {
+    const it = catalog[id];
+    const can = it.jobs.includes(p.job);
+    const dis = !can || p.gold < it.price || id === cur;
+    const stat = type === 'weapon' ? `攻+${it.atk}${it.magicBonus ? ` 魔力${Math.round(it.magicBonus * 100)}%` : ''}` : `防+${it.def}${it.mpBonus ? ` MP+${it.mpBonus}` : ''}`;
+    rows += `<div class="shop-item-row ${dis ? 'disabled' : ''}">
+      <span class="shop-item-name">${it.name}<small>${stat}${can ? '' : '（装備できない）'}</small></span>
+      <span class="shop-item-price">${id === cur ? '装備中' : it.price + 'P'}</span>
+      <button class="shop-btn" data-buy-equip="${id}" ${dis ? 'disabled' : ''}>買う</button></div>`;
   }
-  return rows;
-}
+  const cItem = catalog[cur];
+  rows += `<div class="shop-section-title">売る</div>`;
+  rows += cItem.sell
+    ? `<div class="shop-item-row"><span class="shop-item-name">${cItem.name}</span><span class="shop-item-price">${cItem.sell}P</span><button class="shop-btn" data-sell-equip="1">売る</button></div>`
+    : `<div class="shop-item-row disabled"><span class="shop-item-name">${cItem.name}</span><span>売れない</span></div>`;
+  openShop(type === 'weapon' ? '[ 武器屋 ]' : '[ 防具屋 ]', rows + goldLine());
 
-function bindEquipShopEvents(list, catalog, type, reopenFn) {
-  document.querySelectorAll('[data-buy-equip]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = btn.dataset.buyEquip;
-      const item = catalog[id];
-      game.player.gold -= item.price;
-      game.player[type] = id;
-      addMessage(`${item.name}を購入・装備した！`, '#0af');
-      reopenFn();
-    });
-  });
-  document.querySelectorAll('[data-sell-equip]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = btn.dataset.sellEquip;
-      const item = catalog[id];
-      game.player.gold += item.sell;
-      // 初期装備に戻す
-      if (type === 'weapon') game.player.weapon = JOBS[game.player.job].initialWeapon;
-      if (type === 'armor') game.player.armor = 'cloth';
-      addMessage(`${item.name}を売った！ +${item.sell}P`, '#ffd700');
-      reopenFn();
-    });
+  document.querySelectorAll('[data-buy-equip]').forEach(b => b.addEventListener('click', () => {
+    const id = b.dataset.buyEquip;
+    p.gold -= catalog[id].price;
+    p[type] = id;
+    if (type === 'armor') p.mp = Math.min(p.mp, getMaxMp(p));
+    Sound.sfx('coin');
+    addMessage(`${catalog[id].name}を買って装備した！`, '#0af');
+    openEquipShop(type);
+  }));
+  document.querySelector('[data-sell-equip]')?.addEventListener('click', () => {
+    p.gold += cItem.sell;
+    p[type] = type === 'weapon' ? JOBS[p.job].initialWeapon : 'cloth';
+    if (type === 'armor') p.mp = Math.min(p.mp, getMaxMp(p));
+    Sound.sfx('coin');
+    addMessage(`${cItem.name}を売った。+${cItem.sell}P`, '#ffd700');
+    openEquipShop(type);
   });
 }
 
-// 道具屋
 function openItemShop() {
   const p = game.player;
-  let rows = `<div class="shop-section-title">購入</div>`;
+  let rows = '<div class="shop-section-title">買う</div>';
   for (const id of ITEM_SHOP_LIST) {
-    const cons = CONSUMABLES[id];
-    const canAfford = p.gold >= cons.price;
-    rows += `
-      <div class="shop-item-row ${!canAfford ? 'disabled' : ''}">
-        <span class="shop-item-name">${cons.name}</span>
-        <span class="shop-item-desc">${cons.desc}</span>
-        <span class="shop-item-price">${cons.price}P</span>
-        <button class="shop-btn" data-buy-item="${id}" ${!canAfford ? 'disabled' : ''}>購入</button>
-      </div>`;
+    const c = CONSUMABLES[id];
+    const dis = p.gold < c.price;
+    rows += `<div class="shop-item-row ${dis ? 'disabled' : ''}">
+      <span class="shop-item-name">${c.name}<small>${c.desc}</small></span>
+      <span class="shop-item-price">${c.price}P</span>
+      <button class="shop-btn" data-buy-item="${id}" ${dis ? 'disabled' : ''}>買う</button></div>`;
   }
-
-  rows += `<div class="shop-section-title">売却</div>`;
-  if (p.items.length === 0) {
-    rows += `<div style="color:#666">売れるアイテムがない</div>`;
-  } else {
-    for (const inv of p.items) {
-      const cons = CONSUMABLES[inv.id];
-      rows += `
-        <div class="shop-item-row">
-          <span class="shop-item-name">${cons.name} x${inv.count}</span>
-          <span class="shop-item-price">${cons.sell}P/個</span>
-          <button class="shop-btn" data-sell-item="${inv.id}">売る</button>
-        </div>`;
-    }
+  rows += '<div class="shop-section-title">売る</div>';
+  if (!p.items.length) rows += '<div class="dim">売れる道具がない</div>';
+  for (const it of p.items) {
+    const c = CONSUMABLES[it.id];
+    rows += `<div class="shop-item-row"><span class="shop-item-name">${c.name} x${it.count}</span>
+      <span class="shop-item-price">${c.sell}P</span><button class="shop-btn" data-sell-item="${it.id}">売る</button></div>`;
   }
+  openShop('[ 道具屋 ]', rows + goldLine());
+  document.querySelectorAll('[data-buy-item]').forEach(b => b.addEventListener('click', () => {
+    const c = CONSUMABLES[b.dataset.buyItem];
+    if (!addItem(p, b.dataset.buyItem)) { Sound.sfx('error'); addMessage('これ以上持てない！'); return; }
+    p.gold -= c.price;
+    Sound.sfx('coin');
+    addMessage(`${c.name}を買った。`, '#0af');
+    openItemShop();
+  }));
+  document.querySelectorAll('[data-sell-item]').forEach(b => b.addEventListener('click', () => {
+    const c = CONSUMABLES[b.dataset.sellItem];
+    consumeItem(p, b.dataset.sellItem);
+    p.gold += c.sell;
+    Sound.sfx('coin');
+    addMessage(`${c.name}を売った。+${c.sell}P`, '#ffd700');
+    openItemShop();
+  }));
+}
 
-  rows += `<div class="shop-gold-info" style="margin-top:8px;">所持金: ${p.gold} ペリカ</div>`;
-  openShop('[ 道具屋 ]', rows);
+// ---------- フィールドで道具・魔法を使う ----------
+function openFieldItems() {
+  const p = game.player;
+  let rows = '';
+  const usable = p.items.filter(it => CONSUMABLES[it.id].effect !== 'holy');
+  if (!usable.length) rows = '<div class="dim">使える道具がない</div>';
+  for (const it of usable) {
+    const c = CONSUMABLES[it.id];
+    rows += `<div class="shop-item-row"><span class="shop-item-name">${c.name} x${it.count}<small>${c.desc}</small></span>
+      <button class="shop-btn" data-use-item="${it.id}">使う</button></div>`;
+  }
+  openShop(`[ 道具 ]  HP ${p.hp}/${p.maxHp}  MP ${p.mp}/${getMaxMp(p)}`, rows);
+  document.querySelectorAll('[data-use-item]').forEach(b => b.addEventListener('click', () => {
+    const msg = applyItemEffect(b.dataset.useItem, false);
+    consumeItem(p, b.dataset.useItem);
+    addMessage(msg, '#0f0');
+    updateStatusPanel();
+    openFieldItems();
+  }));
+}
 
-  document.querySelectorAll('[data-buy-item]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = btn.dataset.buyItem;
-      const cons = CONSUMABLES[id];
-      if (p.gold < cons.price) return;
-      if (!addItem(p, id)) {
-        addMessage('アイテムがいっぱいだ！');
-        return;
-      }
-      p.gold -= cons.price;
-      addMessage(`${cons.name}を購入した！`, '#0af');
-      openItemShop();
-    });
-  });
-
-  document.querySelectorAll('[data-sell-item]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = btn.dataset.sellItem;
-      const cons = CONSUMABLES[id];
-      consumeItem(p, id);
-      p.gold += cons.sell;
-      addMessage(`${cons.name}を売った！ +${cons.sell}P`, '#ffd700');
-      openItemShop();
-    });
-  });
+function openFieldMagic() {
+  const p = game.player;
+  const heals = p.spells.filter(s => SPELLS[s].type === 'heal');
+  let rows = heals.length ? '' : '<div class="dim">ここで使える魔法がない</div>';
+  for (const sid of heals) {
+    const sp = SPELLS[sid];
+    rows += `<div class="shop-item-row ${p.mp < sp.mp ? 'disabled' : ''}"><span class="shop-item-name">${sp.name}<small>MP${sp.mp} ${sp.desc}</small></span>
+      <button class="shop-btn" data-cast="${sid}" ${p.mp < sp.mp ? 'disabled' : ''}>唱える</button></div>`;
+  }
+  openShop(`[ 魔法 ]  HP ${p.hp}/${p.maxHp}  MP ${p.mp}/${getMaxMp(p)}`, rows);
+  document.querySelectorAll('[data-cast]').forEach(b => b.addEventListener('click', () => {
+    const sid = b.dataset.cast;
+    p.mp -= SPELLS[sid].mp;
+    const amt = Math.min(p.maxHp - p.hp, spellPower(sid, p));
+    p.hp += amt;
+    Sound.sfx('heal');
+    addMessage(`${SPELLS[sid].name}！ HPが${amt}回復した。`, '#0f0');
+    updateStatusPanel();
+    openFieldMagic();
+  }));
 }
 
 // =============================
-// セーブ/ロード（スロット制）
+// セーブ / ロード
 // =============================
-const MAP_NAMES = { town: '町', dungeon1: 'B1F', dungeon2: 'B2F', dungeon3: 'B3F' };
-
-// 現在時刻を「YYYY/MM/DD HH:MM」形式で返す
 function formatNow() {
   const d = new Date();
-  const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const z = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}/${z(d.getMonth() + 1)}/${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}`;
 }
 
-// 指定スロットにセーブ
 function saveToSlot(slot) {
-  const saveData = {
+  const maps = {};
+  for (const [id, m] of Object.entries(game.maps)) maps[id] = { ...m, grid: m.grid.map(r => r.join('')) };
+  const data = {
+    version: 2,
     savedAt: formatNow(),
-    charInfo: {
-      name: game.player.name,
-      job: game.player.job,
-      lv: game.player.lv,
-      location: MAP_NAMES[game.currentMap] || '─',
-    },
+    charInfo: { name: game.player.name, job: game.player.job, lv: game.player.lv, location: MAP_NAMES[game.currentMap] },
     player: game.player,
     currentMap: game.currentMap,
-    explored: Object.fromEntries(
-      Object.entries(game.explored).map(([k, v]) => [k, [...v]])
-    ),
+    maps,
+    explored: Object.fromEntries(Object.entries(game.explored).map(([k, v]) => [k, [...v]])),
     flags: game.flags,
+    stats: game.stats,
   };
-  localStorage.setItem(CONFIG.SAVE_SLOT_KEY + slot, JSON.stringify(saveData));
-  addMessage(`スロット${slot}にセーブしました。`, '#00ff41');
+  store.setItem(CONFIG.SAVE_SLOT_KEY + slot, JSON.stringify(data));
+  Sound.sfx('chest');
+  addMessage(`スロット${slot}にセーブした。`, '#00ff41');
 }
 
-// 指定スロットからロード
 function loadFromSlot(slot) {
-  const raw = localStorage.getItem(CONFIG.SAVE_SLOT_KEY + slot);
+  const raw = store.getItem(CONFIG.SAVE_SLOT_KEY + slot);
   if (!raw) return false;
   try {
-    const data = JSON.parse(raw);
-    game.player = data.player;
-    game.currentMap = data.currentMap;
-    game.explored = Object.fromEntries(
-      Object.entries(data.explored).map(([k, v]) => [k, new Set(v)])
-    );
-    game.flags = data.flags;
+    const d = JSON.parse(raw);
+    const st = newGameState();
+    st.player = d.player;
+    st.currentMap = d.currentMap;
+    st.maps = {};
+    for (const [id, m] of Object.entries(d.maps)) st.maps[id] = { ...m, grid: m.grid.map(r => r.split('')) };
+    st.explored = Object.fromEntries(Object.entries(d.explored).map(([k, v]) => [k, new Set(v)]));
+    st.flags = Object.assign(st.flags, d.flags);
+    st.stats = Object.assign(st.stats, d.stats || {});
+    game = st;
     return true;
   } catch (e) {
     console.error('ロード失敗:', e);
@@ -1894,163 +1470,77 @@ function loadFromSlot(slot) {
   }
 }
 
-// 指定スロットを削除
-function deleteSlot(slot) {
-  localStorage.removeItem(CONFIG.SAVE_SLOT_KEY + slot);
-}
-
-// 全スロット情報を { 1: data, 2: data, ... } 形式で返す
 function getSaveSlots() {
-  const result = {};
+  const r = {};
   for (let i = 1; i <= CONFIG.SAVE_SLOTS; i++) {
-    const raw = localStorage.getItem(CONFIG.SAVE_SLOT_KEY + i);
-    if (raw) {
-      try { result[i] = JSON.parse(raw); } catch (e) {}
-    }
+    const raw = store.getItem(CONFIG.SAVE_SLOT_KEY + i);
+    if (raw) { try { r[i] = JSON.parse(raw); } catch (e) {} }
   }
-  return result;
+  return r;
+}
+function hasSaveData() { return Object.keys(getSaveSlots()).length > 0; }
+function updateTitleLoadBtn() { const b = $('btn-load-title'); if (b) b.disabled = !hasSaveData(); }
+
+function openSlotOverlay(title, html) {
+  $('slot-title').textContent = title;
+  $('slot-list').innerHTML = html;
+  $('slot-overlay').classList.remove('hidden');
+}
+function closeSlotOverlay() { $('slot-overlay').classList.add('hidden'); }
+
+function slotLabel(i, s) {
+  const ci = s.charInfo;
+  return `<span class="slot-char">スロット${i}: ${esc(ci.name)}（${JOBS[ci.job].name}）LV${ci.lv}</span>
+    <span class="slot-location">${esc(ci.location)}</span><span class="slot-date">${esc(s.savedAt)}</span>`;
 }
 
-// いずれかのスロットにデータがあるか
-function hasSaveData() {
-  for (let i = 1; i <= CONFIG.SAVE_SLOTS; i++) {
-    if (localStorage.getItem(CONFIG.SAVE_SLOT_KEY + i)) return true;
-  }
-  return false;
-}
-
-// タイトル画面の「ロードする」ボタンを更新
-function updateTitleLoadBtn() {
-  const btn = document.getElementById('btn-load-title');
-  if (btn) btn.disabled = !hasSaveData();
-}
-
-// スロット選択オーバーレイを開く（共通）
-function openSlotOverlay(title, listHtml) {
-  document.getElementById('slot-title').textContent = title;
-  document.getElementById('slot-list').innerHTML = listHtml;
-  document.getElementById('slot-overlay').classList.remove('hidden');
-}
-
-// スロット選択オーバーレイを閉じる
-function closeSlotOverlay() {
-  document.getElementById('slot-overlay').classList.add('hidden');
-}
-
-// セーブスロット選択UIを開く
-// exitAfter=true の場合、セーブ後にタイトルへ戻る
 function openSaveSlotUI(exitAfter) {
+  game.inputEnabled = false;
   const slots = getSaveSlots();
   let html = '';
-
   for (let i = 1; i <= CONFIG.SAVE_SLOTS; i++) {
-    const slot = slots[i];
-    if (slot) {
-      const ci = slot.charInfo;
-      html += `
-        <div class="slot-card">
-          <div class="slot-info">
-            <span class="slot-char">スロット${i}: ${ci.name}（${JOBS[ci.job].name}）LV${ci.lv}</span>
-            <span class="slot-location">${ci.location}</span>
-            <span class="slot-date">${slot.savedAt}</span>
-          </div>
-          <div class="slot-actions">
-            <button class="slot-btn" data-save-slot="${i}">ここにセーブ</button>
-          </div>
-        </div>`;
-    } else {
-      html += `
-        <div class="slot-card">
-          <div class="slot-info">
-            <span class="slot-char">スロット${i}（空き）</span>
-          </div>
-          <div class="slot-actions">
-            <button class="slot-btn" data-save-slot="${i}">ここにセーブ</button>
-          </div>
-        </div>`;
-    }
+    html += `<div class="slot-card"><div class="slot-info">${slots[i] ? slotLabel(i, slots[i]) : `<span class="slot-char">スロット${i}（空き）</span>`}</div>
+      <div class="slot-actions"><button class="slot-btn" data-save-slot="${i}">ここにセーブ</button></div></div>`;
   }
-
-  const title = exitAfter ? '[ セーブして終了 ]' : '[ セーブスロット選択 ]';
-  openSlotOverlay(title, html);
-
-  document.querySelectorAll('[data-save-slot]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const slot = parseInt(btn.dataset.saveSlot);
-      saveToSlot(slot);
-      closeSlotOverlay();
-      updateTitleLoadBtn();
-      if (exitAfter) {
-        cursor.context = null;
-        document.getElementById('menu-overlay').classList.add('hidden');
-        showScreen('title');
-        updateTitleLoadBtn();
-      } else {
-        toggleMenu();
-      }
-    });
-  });
+  openSlotOverlay(exitAfter ? '[ セーブして終了 ]' : '[ セーブ ]', html);
+  document.querySelectorAll('[data-save-slot]').forEach(b => b.addEventListener('click', () => {
+    saveToSlot(parseInt(b.dataset.saveSlot, 10));
+    closeSlotOverlay();
+    updateTitleLoadBtn();
+    if (exitAfter) { showScreen('title'); Sound.bgm('title'); }
+    else game.inputEnabled = true;
+  }));
 }
 
-// ロードスロット選択UIを開く
 function openLoadSlotUI() {
   const slots = getSaveSlots();
   let html = '';
-  let hasAny = false;
-
   for (let i = 1; i <= CONFIG.SAVE_SLOTS; i++) {
-    const slot = slots[i];
-    if (slot) {
-      hasAny = true;
-      const ci = slot.charInfo;
-      html += `
-        <div class="slot-card">
-          <div class="slot-info">
-            <span class="slot-char">スロット${i}: ${ci.name}（${JOBS[ci.job].name}）LV${ci.lv}</span>
-            <span class="slot-location">${ci.location}</span>
-            <span class="slot-date">${slot.savedAt}</span>
-          </div>
-          <div class="slot-actions">
-            <button class="slot-btn" data-load-slot="${i}">ロード</button>
-            <button class="slot-btn slot-btn-danger" data-delete-slot="${i}">削除</button>
-          </div>
-        </div>`;
-    } else {
-      html += `
-        <div class="slot-card slot-empty">
-          <div class="slot-info">
-            <span class="slot-char">スロット${i}（空き）</span>
-          </div>
-        </div>`;
-    }
+    html += slots[i]
+      ? `<div class="slot-card"><div class="slot-info">${slotLabel(i, slots[i])}</div>
+          <div class="slot-actions"><button class="slot-btn" data-load-slot="${i}">ロード</button>
+          <button class="slot-btn slot-btn-danger" data-delete-slot="${i}">削除</button></div></div>`
+      : `<div class="slot-card slot-empty"><div class="slot-info"><span class="slot-char">スロット${i}（空き）</span></div></div>`;
   }
-
-  if (!hasAny) {
-    html = '<div style="color:#666;text-align:center;padding:20px;">セーブデータがありません</div>';
-  }
-
-  openSlotOverlay('[ ロードする ]', html);
-
-  document.querySelectorAll('[data-load-slot]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const slot = parseInt(btn.dataset.loadSlot);
+  openSlotOverlay('[ ロード ]', html);
+  document.querySelectorAll('[data-load-slot]').forEach(b => b.addEventListener('click', () => {
+    if (loadFromSlot(parseInt(b.dataset.loadSlot, 10))) {
       closeSlotOverlay();
-      initMaps();
-      if (loadFromSlot(slot)) {
-        startGameScreen();
-        addMessage('ゲームをロードした。');
-      }
-    });
-  });
-
-  document.querySelectorAll('[data-delete-slot]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (!confirm(`スロット${btn.dataset.deleteSlot}のデータを削除しますか？`)) return;
-      deleteSlot(parseInt(btn.dataset.deleteSlot));
-      updateTitleLoadBtn();
-      openLoadSlotUI(); // 再描画
-    });
-  });
+      startGameScreen();
+      addMessage('冒険の続きを始めた。');
+    }
+  }));
+  document.querySelectorAll('[data-delete-slot]').forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.armed !== '1') {
+      b.dataset.armed = '1';
+      b.textContent = '本当に削除？';
+      setTimeout(() => { b.dataset.armed = ''; b.textContent = '削除'; }, 3000);
+      return;
+    }
+    store.removeItem(CONFIG.SAVE_SLOT_KEY + b.dataset.deleteSlot);
+    updateTitleLoadBtn();
+    openLoadSlotUI();
+  }));
 }
 
 // =============================
@@ -2059,187 +1549,181 @@ function openLoadSlotUI() {
 function triggerGameOver() {
   game.inputEnabled = false;
   showScreen('gameover');
-  document.getElementById('gameover-msg').textContent =
-    `${game.player.name}は力尽きた...`;
-  document.getElementById('btn-go-load').disabled = !hasSaveData();
+  Sound.bgm('gameover');
+  $('gameover-msg').textContent = `${game.player.name}は力尽きた…`;
+  $('btn-go-load').disabled = !hasSaveData();
 }
 
 function triggerEnding() {
   game.inputEnabled = false;
+  const p = game.player;
   showScreen('ending');
-  document.getElementById('ending-msg').textContent =
-    `おめでとう！\n${game.player.name}は謎の洞窟から伝説の秘宝を持ち帰り、英雄となった！`;
+  Sound.bgm('ending');
+  $('ending-art').innerHTML = Art.playerInline(p.job, 72) + Art.princessInline(72);
+  const treasure = game.flags.hasTreasure
+    ? `さらに${esc(p.name)}は、伝説の秘宝「竜の瞳」を王に捧げた。<br>王国は末永く栄えたという。`
+    : '…洞窟の奥には、まだ秘宝が眠っているという噂だ。';
+  $('ending-msg').innerHTML = `${esc(p.name)}はミレーユ姫を救い出し、<br>王国の英雄となった！<br><br>${treasure}`;
+  $('ending-stats').innerHTML = `${JOBS[p.job].name} LV${p.lv}　歩数 ${game.stats.steps}　倒した敵 ${game.stats.kills}`;
+}
+
+// =============================
+// 物語（オープニング）
+// =============================
+const STORY = [
+  'ここは山あいの小さな王国。',
+  'ある嵐の夜、暗黒竜ヴォルガンが城を襲い、<br>ミレーユ姫をさらっていった。',
+  '竜は町の南にある「謎の洞窟」の<br>最深部に棲むという。',
+  '洞窟には、竜が守る伝説の秘宝が<br>眠っているとも伝えられている。',
+  'そして今、一人の若者が立ち上がった——',
+];
+
+function showStory(name) {
+  showScreen('story');
+  Sound.bgm('title');
+  const box = $('story-text');
+  box.replaceChildren();
+  const lines = [...STORY.slice(0, 4), `その名は、${esc(name)}。`];
+  lines.forEach((t, i) => {
+    const p = document.createElement('p');
+    p.innerHTML = t;
+    p.style.animationDelay = `${i * 0.9}s`;
+    box.appendChild(p);
+  });
 }
 
 // =============================
 // イベント登録
 // =============================
 function initEvents() {
-  // キーボード入力
+  // 最初の操作で音を有効化
+  const unlockOnce = () => Sound.unlock();
+  document.addEventListener('pointerdown', unlockOnce);
+  document.addEventListener('keydown', unlockOnce);
+
   document.addEventListener('keydown', e => {
-    // カーソルコンテキストが有効な場合はTab/Enter/Escapeを優先
     if (cursor.context) {
-      if (e.key === 'Tab') {
-        e.preventDefault();
-        moveCursor(e.shiftKey ? -1 : 1);
-      } else if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        executeCursor();
-      } else if (e.key === 'Escape') {
-        handleCursorEscape();
-      }
-      // 矢印キー・WASDはここでreturnして移動処理に渡さない
+      if (e.key === 'Tab' || e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); moveCursor(1); }
+      else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); moveCursor(-1); }
+      else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); executeCursor(); }
+      else if (e.key === 'Escape') handleCursorEscape();
       return;
     }
-    // 通常のゲーム入力
     if (!game.inputEnabled) return;
-    // ESCでメニュー
-    if (e.key === 'Escape' && game.screen === 'game') {
-      toggleMenu();
-      return;
-    }
+    if (e.key === 'Escape' && game.screen === 'game') { toggleMenu(); return; }
     const dir = MOVE_MAP[e.key];
-    if (dir && game.screen === 'game') {
-      e.preventDefault();
-      tryMove(dir[0], dir[1]);
-    }
+    if (dir && game.screen === 'game') { e.preventDefault(); tryMove(dir[0], dir[1]); }
   });
 
-  // タイトル画面
-  document.getElementById('btn-new-game').addEventListener('click', () => {
-    showScreen('create');
-  });
+  $('btn-new-game').addEventListener('click', () => { Sound.sfx('select'); showScreen('create'); });
+  $('btn-load-title').addEventListener('click', () => { Sound.sfx('select'); openLoadSlotUI(); });
 
-  document.getElementById('btn-load-title').addEventListener('click', () => {
-    openLoadSlotUI();
-  });
-
-  // キャラクター作成
   let selectedJob = null;
-
   document.querySelectorAll('.job-card').forEach(card => {
     card.addEventListener('click', () => {
       document.querySelectorAll('.job-card').forEach(c => c.classList.remove('selected'));
       card.classList.add('selected');
       selectedJob = card.dataset.job;
+      Sound.sfx('select');
       updateStartButton();
     });
   });
-
-  document.getElementById('input-name').addEventListener('input', updateStartButton);
-
+  document.querySelectorAll('.job-icon').forEach(el => { el.innerHTML = Art.playerInline(el.dataset.job, 40); });
+  $('input-name').addEventListener('input', updateStartButton);
   function updateStartButton() {
-    const name = document.getElementById('input-name').value.trim();
-    document.getElementById('btn-start-game').disabled = !name || !selectedJob;
+    $('btn-start-game').disabled = !$('input-name').value.trim() || !selectedJob;
   }
 
-  document.getElementById('btn-start-game').addEventListener('click', () => {
-    const name = document.getElementById('input-name').value.trim();
+  $('btn-start-game').addEventListener('click', () => {
+    const name = $('input-name').value.trim();
     if (!name || !selectedJob) return;
-
+    game = newGameState();
     initMaps();
     game.player = createPlayer(name, selectedJob);
     game.currentMap = 'town';
     game.player.x = game.maps.town.startX;
     game.player.y = game.maps.town.startY;
-    game.flags = { bossDefeated: false, hasTreasure: false, bossEncountered: false };
-    game.explored = { town: new Set(), dungeon1: new Set(), dungeon2: new Set(), dungeon3: new Set() };
-
     markExplored();
+    showStory(name);
+  });
+
+  $('btn-story-go').addEventListener('click', () => {
     startGameScreen();
-    addMessage(`${name}の冒険が始まった！`, '#00ff41');
+    addMessage(`${game.player.name}の冒険が始まった！ まずは城の王に会おう。`, '#00ff41');
   });
 
-  // バトルコマンド
-  document.querySelectorAll('.battle-btn[data-cmd]').forEach(btn => {
-    btn.addEventListener('click', () => onBattleCommand(btn.dataset.cmd));
-  });
+  document.querySelectorAll('.battle-btn[data-cmd]').forEach(b => b.addEventListener('click', () => onBattleCommand(b.dataset.cmd)));
+  $('btn-sub-back').addEventListener('click', showBattleMainCmd);
+  $('btn-shop-close').addEventListener('click', closeShop);
 
-  document.getElementById('btn-sub-back').addEventListener('click', showBattleMainCmd);
-
-  // ショップ閉じる
-  document.getElementById('btn-shop-close').addEventListener('click', closeShop);
-
-  // メニュー
-  document.getElementById('btn-menu').addEventListener('click', toggleMenu);
-  document.getElementById('btn-menu-close').addEventListener('click', toggleMenu);
-  document.getElementById('btn-save').addEventListener('click', () => {
-    toggleMenu(); // メニューを閉じてからスロット選択を開く
-    openSaveSlotUI(false);
-  });
-  document.getElementById('btn-save-exit').addEventListener('click', () => {
-    toggleMenu();
-    openSaveSlotUI(true);
-  });
-  document.getElementById('btn-slot-close').addEventListener('click', () => {
+  $('btn-menu').addEventListener('click', toggleMenu);
+  $('btn-menu-close').addEventListener('click', toggleMenu);
+  $('btn-field-item').addEventListener('click', () => { toggleMenu(); openFieldItems(); });
+  $('btn-field-magic').addEventListener('click', () => { toggleMenu(); openFieldMagic(); });
+  $('btn-save').addEventListener('click', () => { toggleMenu(); openSaveSlotUI(false); });
+  $('btn-save-exit').addEventListener('click', () => { toggleMenu(); openSaveSlotUI(true); });
+  $('btn-slot-close').addEventListener('click', () => {
     closeSlotOverlay();
-    // スロット画面からゲームに戻る場合はinputEnabledを復元
     if (game.screen === 'game') game.inputEnabled = true;
     updateTitleLoadBtn();
   });
 
-  // ゲームオーバー
-  document.getElementById('btn-go-load').addEventListener('click', () => {
-    if (!hasSaveData()) return;
-    openLoadSlotUI();
-  });
+  $('btn-go-load').addEventListener('click', () => { if (hasSaveData()) openLoadSlotUI(); });
+  $('btn-go-title').addEventListener('click', () => { showScreen('title'); Sound.bgm('title'); updateTitleLoadBtn(); });
+  $('btn-ending-title').addEventListener('click', () => { showScreen('title'); Sound.bgm('title'); updateTitleLoadBtn(); });
 
-  document.getElementById('btn-go-title').addEventListener('click', () => {
-    showScreen('title');
-    updateTitleLoadBtn();
-  });
+  // 音のON/OFF
+  const applySoundLabel = () => document.querySelectorAll('.btn-sound').forEach(b => { b.textContent = Sound.isMuted() ? '♪ OFF' : '♪ ON'; });
+  document.querySelectorAll('.btn-sound').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    Sound.unlock();
+    Sound.setMuted(!Sound.isMuted());
+    store.setItem(CONFIG.SOUND_KEY, Sound.isMuted() ? '1' : '0');
+    applySoundLabel();
+  }));
+  applySoundLabel();
 
-  // エンディング
-  document.getElementById('btn-ending-title').addEventListener('click', () => {
-    showScreen('title');
-    updateTitleLoadBtn();
-  });
-
-  // 仮想Dパッド（タッチ操作）
-  const dpadMap = {
-    'dpad-up':    [0, -1],
-    'dpad-down':  [0,  1],
-    'dpad-left':  [-1, 0],
-    'dpad-right': [1,  0],
-  };
-  Object.entries(dpadMap).forEach(([id, dir]) => {
-    const btn = document.getElementById(id);
-    if (!btn) return;
-    btn.addEventListener('touchstart', e => {
+  // 十字キー（押しっぱなしで連続移動）
+  const dirs = { 'dpad-up': [0, -1], 'dpad-down': [0, 1], 'dpad-left': [-1, 0], 'dpad-right': [1, 0] };
+  let repeat = null;
+  const stop = () => { clearInterval(repeat); repeat = null; };
+  Object.entries(dirs).forEach(([id, d]) => {
+    const b = $(id);
+    const go = () => { if (game.screen === 'game' && game.inputEnabled && !cursor.context) tryMove(d[0], d[1]); };
+    b.addEventListener('pointerdown', e => {
       e.preventDefault();
-      if (game.screen === 'game' && game.inputEnabled && !cursor.context) {
-        tryMove(dir[0], dir[1]);
-      }
-    }, { passive: false });
-    // マウスでもテスト可能にする（click）
-    btn.addEventListener('click', () => {
-      if (game.screen === 'game' && game.inputEnabled && !cursor.context) {
-        tryMove(dir[0], dir[1]);
-      }
+      go();
+      stop();
+      repeat = setInterval(go, 170);
     });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, stop));
   });
+  window.addEventListener('blur', stop);
+
+  window.addEventListener('resize', () => { if (game.screen === 'game') { fitMap(); renderMap(); } });
 }
 
 function toggleMenu() {
-  const overlay = document.getElementById('menu-overlay');
-  if (overlay.classList.contains('hidden')) {
-    overlay.classList.remove('hidden');
+  const ov = $('menu-overlay');
+  if (ov.classList.contains('hidden')) {
+    ov.classList.remove('hidden');
     game.inputEnabled = false;
+    $('btn-field-magic').disabled = !game.player.spells.some(s => SPELLS[s].type === 'heal');
     setCursorContext('menu');
   } else {
     cursor.context = null;
-    overlay.classList.add('hidden');
+    ov.classList.add('hidden');
     game.inputEnabled = true;
   }
 }
 
-// ゲーム画面を表示してレンダリング
 function startGameScreen() {
   showScreen('game');
   game.inputEnabled = true;
   markExplored();
-  renderMap();
-  updateStatusPanel();
+  playMapBgm();
+  fitMap();
+  renderAll();
   updateTitleLoadBtn();
 }
 
@@ -2247,30 +1731,11 @@ function startGameScreen() {
 // 初期化
 // =============================
 function init() {
-  // 旧バージョン（v1）のセーブデータをスロット1に移行
-  const oldSave = localStorage.getItem(CONFIG.SAVE_KEY);
-  if (oldSave && !localStorage.getItem(CONFIG.SAVE_SLOT_KEY + '1')) {
-    try {
-      const oldData = JSON.parse(oldSave);
-      const migrated = {
-        savedAt: '（移行済み）',
-        charInfo: {
-          name: oldData.player?.name || '？',
-          job: oldData.player?.job || 'warrior',
-          lv: oldData.player?.lv || 1,
-          location: MAP_NAMES[oldData.currentMap] || '─',
-        },
-        ...oldData,
-      };
-      localStorage.setItem(CONFIG.SAVE_SLOT_KEY + '1', JSON.stringify(migrated));
-      localStorage.removeItem(CONFIG.SAVE_KEY);
-    } catch (e) {}
-  }
-
+  Sound.setMuted(store.getItem(CONFIG.SOUND_KEY) === '1');
   updateTitleLoadBtn();
   initEvents();
   showScreen('title');
+  Sound.bgm('title');
 }
 
-// スクリプト読み込み後に初期化
 init();

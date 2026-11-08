@@ -1,46 +1,28 @@
-const CACHE_NAME = 'nazo-no-doukutsu-v1';
-const ASSETS = [
-  './',
-  './index.html',
-  './style.css',
-  './game.js',
-  './manifest.json',
-  './icon.svg',
-];
+// 更新がすぐ届くよう「ネットワーク優先・失敗したらキャッシュ」で配信する
+const CACHE_NAME = 'nazo-no-doukutsu-v2';
+const ASSETS = ['./', './index.html', './style.css', './art.js', './audio.js', './game.js', './manifest.json', './icon.svg'];
 
-// インストール: 全アセットをキャッシュ
 self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))
-  );
+  event.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)).catch(() => {}));
   self.skipWaiting();
 });
 
-// アクティベート: 古いキャッシュを削除
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
-        keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
-      )
-    )
+    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))))
   );
   self.clients.claim();
 });
 
-// フェッチ: キャッシュ優先（オフライン対応）
 self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET' || new URL(event.request.url).origin !== self.location.origin) return;
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      if (cached) return cached;
-      return fetch(event.request).then(response => {
-        // 成功したレスポンスをキャッシュに追加
-        if (response && response.status === 200 && response.type === 'basic') {
-          const cloned = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, cloned));
-        }
-        return response;
-      });
-    })
+    fetch(event.request).then(res => {
+      if (res && res.status === 200) {
+        const copy = res.clone();
+        caches.open(CACHE_NAME).then(c => c.put(event.request, copy));
+      }
+      return res;
+    }).catch(() => caches.match(event.request))
   );
 });

@@ -1,11 +1,11 @@
 {
   "name": "謎の洞窟",
   "short_name": "謎の洞窟",
-  "description": "伝説の秘宝を求めて謎の洞窟を探索するRPG",
+  "description": "暗黒竜にさらわれた姫を救え。謎の洞窟を探索するレトロ風RPG",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#000000",
-  "theme_color": "#00ff41",
+  "theme_color": "#000000",
   "start_url": "./",
   "scope": "./",
   "icons": [
