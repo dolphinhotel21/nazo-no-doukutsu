@@ -123,8 +123,19 @@ const GENDERS = ['男性', '女性', 'その他', '秘密'];
 function addMemory(id, text) {
   const pr = game.profiles && game.profiles[id];
   if (!pr) return;
-  pr.memories.push(String(text).slice(0, 60));
+  text = String(text).slice(0, 60);
+  if (pr.memories[pr.memories.length - 1] === text) return;   // 同じ出来事は続けて書かない
+  pr.memories.push(text);
   while (pr.memories.length > MEMORY_MAX) pr.memories.shift();
+}
+// 仲間ひとりの記憶に残す（主人公は対象外）
+function addMemoryOf(m, text) { if (m && m.companion) addMemory(m.companion, text); }
+// 同じ種類の古い記憶を置き換える（レベルなど）
+function replaceMemory(id, pattern, text) {
+  const pr = game.profiles && game.profiles[id];
+  if (!pr) return;
+  pr.memories = pr.memories.filter(x => !pattern.test(x));
+  addMemory(id, text);
 }
 // いま一緒にいる仲間（と姫）全員の記憶に残す
 function addMemoryAll(text) {
@@ -401,6 +412,7 @@ function equip(m, slot, id) {
   if (old && old !== 'cloth') addGear(old);
   m[slot] = id || (slot === 'clothes' ? 'cloth' : null);
   m.mp = Math.min(m.mp, getMaxMp(m));
+  if (id && m.companion && game.party[0]) addMemoryOf(m, `${game.party[0].name}から${gearName(id)}を渡されて身に付けた`);
   return true;
 }
 
@@ -878,7 +890,10 @@ function changeMap(target, how) {
   game.trail = [];
   game.guide = null;
   const no = DUNGEONS.indexOf(target) + 1;
-  if (no > (game.flags.deepest || 0)) game.flags.deepest = no;
+  if (no > (game.flags.deepest || 0)) {
+    game.flags.deepest = no;
+    addMemoryAll(`${hero().name}たちと洞窟の${MAP_NAMES[target]}に初めて足を踏み入れた`);
+  }
   markExplored();
   playMapBgm();
   renderAll();
@@ -1508,6 +1523,12 @@ function hurtEnemy(i, dmg, cls, sfx) {
   popNumber(dmg, cls || 'pop-enemy', 'bf-enrow-' + i);
   if (e.hp <= 0) {
     addBattleLog(`${e.name}を倒した！`, '#ffd700');
+    const kind = e.name.replace(/[ABC]$/, '');
+    game.flags.slain = game.flags.slain || [];
+    if (!battleState.boss && !game.flags.slain.includes(kind)) {
+      game.flags.slain.push(kind);
+      addMemoryAll(`${hero().name}たちと初めて${kind}を倒した`);
+    }
     setTimeout(() => { const el = enEl(i); if (el) el.classList.add('dead'); }, 120);
   }
   refreshBattle();
@@ -1624,6 +1645,7 @@ function runAction(action, target) {
       Sound.sfx('holy');
       Fx.aura('level', pmEl(target));
       addBattleLog(`${t.name}が生き返った！`, '#ffd');
+      addMemoryOf(t, `倒れたところを${m.name}の${sp.name}で蘇らせてもらった`);
       finishAction();
       return;
     }
@@ -1698,6 +1720,7 @@ function applyItem(id, ti, inBattle) {
       t.hp = Math.ceil(t.maxHp / 2);
       t.poisoned = false;
       Sound.sfx('holy');
+      addMemoryOf(t, `倒れたところを${c.name}で蘇らせてもらった`);
       if (inBattle) Fx.aura('level', pmEl(ti));
       return `${t.name}が生き返った！`;
     default: return '';
@@ -1814,7 +1837,10 @@ function enemyAct(ei, turnIndex, done) {
       m.poisoned = true;
       addBattleLog(`${m.name}は毒を受けた！`, '#a0f');
     }
-    if (m.hp <= 0) addBattleLog(`${m.name}は倒れた…`, '#ff5555');
+    if (m.hp <= 0) {
+      addBattleLog(`${m.name}は倒れた…`, '#ff5555');
+      addMemoryOf(m, `${MAP_NAMES[game.currentMap]}で${e.name.replace(/[ABC]$/, '')}にやられて倒れた`);
+    }
   };
   const after = () => {
     Sound.sfx('hurt');
@@ -1924,6 +1950,7 @@ function checkLevelUp(m) {
     m.hp = m.maxHp;
     m.mp = getMaxMp(m);
     up = true;
+    if (m.companion) replaceMemory(m.companion, /^レベル\d+に上がった/, `レベル${m.lv}に上がった。前より強くなった`);
     if (battleState) addBattleLog(`${m.name}はレベル${m.lv}に上がった！`, '#ffd700');
     else addMessage(`${m.name}はレベル${m.lv}に上がった！`, '#ffd700');
   }
@@ -2018,7 +2045,7 @@ function openPartyMenu() {
         <div><b>${esc(m.name)}</b>　${JOBS[m.job].name} LV${m.lv}${m.hp <= 0 ? '　<span style="color:#f66">倒れている</span>' : ''}</div>
         <div class="dim2">HP ${m.hp}/${m.maxHp}　MP ${m.mp}/${getMaxMp(m)}　攻${getAtk(m)}　防${getDef(m)}</div>
         <div class="dim2">武器:${weaponOf(m).name}　服:${clothesOf(m).name}　鎧:${armorOf(m) ? armorOf(m).name : 'なし'}　飾り:${accOf(m) ? accOf(m).name : 'なし'}</div>
-        <div class="dim2">EXP ${m.exp}/${m.expNext}</div>
+        <div class="dim2">EXP ${m.exp}/${m.expNext}${m.companion ? `　記憶 ${game.profiles[m.companion].memories.length}件` : ''}</div>
         <div class="dim2">魔法: ${m.spells.length ? m.spells.map(s => SPELLS[s].name).join('・') : 'なし'}</div>
       </div>
       <div class="pd-btns">
@@ -2157,6 +2184,7 @@ function openInn() {
     closeShop();
     flashScreen('heal');
     addMessage('ぐっすり眠った。全員のHP・MPが全回復した！', '#00ff41');
+    addMemoryAll('町の宿屋に泊まって、皆で体を休めた');
   });
   $('btn-inn-cancel').addEventListener('click', closeShop);
 }
@@ -2536,7 +2564,7 @@ function openFieldMagic(casterIdx, sid) {
     document.querySelectorAll('[data-cast-to]').forEach(b => b.addEventListener('click', () => {
       const t = game.party[parseInt(b.dataset.castTo, 10)];
       m.mp -= sp.mp;
-      if (sp.type === 'revive') { t.hp = Math.ceil(t.maxHp / 2); addMessage(`${t.name}が生き返った！`, '#ffd'); Sound.sfx('holy'); }
+      if (sp.type === 'revive') { t.hp = Math.ceil(t.maxHp / 2); addMessage(`${t.name}が生き返った！`, '#ffd'); Sound.sfx('holy'); addMemoryOf(t, `倒れたところを${m.name}の${sp.name}で蘇らせてもらった`); }
       else if (sp.type === 'cure') { addMessage(t.poisoned ? `${m.name}の${sp.name}！ ${t.name}の毒が消えた。` : `${t.name}は毒を受けていない。`, '#0f0'); t.poisoned = false; Sound.sfx('heal'); }
       else { const amt = Math.min(t.maxHp - t.hp, spellPower(sid, m)); t.hp += amt; Sound.sfx('heal'); addMessage(`${m.name}の${sp.name}！ ${t.name}のHPが${amt}回復。`, '#0f0'); }
       openFieldMagic(casterIdx);

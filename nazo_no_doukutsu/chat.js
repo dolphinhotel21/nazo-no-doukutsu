@@ -486,8 +486,15 @@ ${p.name}:`;
   async function rememberTalk(id) {
     const lines = history[id] || [];
     const fresh = lines.slice(lines.lastSummarized || 0);
-    if (!aiReady() || fresh.filter(x => x.role === 'user').length < 2) return;
+    const said = fresh.filter(x => x.role === 'user');
+    if (!said.length) return;
     lines.lastSummarized = lines.length;
+    if (!aiReady()) {
+      // AIがない時は、話しかけた言葉をそのまま記憶に残す
+      const first = said[0].text.slice(0, 24);
+      addMemory(id, `${hero().name}に「${first}」と話しかけられた`);
+      return;
+    }
     const p = who(id), h = hero();
     const convo = fresh.map(x => `${x.role === 'user' ? h.name : p.name}: ${x.text}`).join('\n');
     try {
