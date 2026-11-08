@@ -41,6 +41,8 @@ const Chat = (() => {
 
   // 起動時に Claude が使えるか確かめる（使えない環境では何もしない）
   function init() {
+    loadCfg();
+    updateBadge();
     let tries = 0;
     const tryUse = () => {
       if (window.claude && typeof window.claude.use === 'function') {
@@ -52,14 +54,165 @@ const Chat = (() => {
     tryUse();
   }
 
-  function aiReady() { return !!sample && !disabledReason; }
+  // ---------- AIの接続先（Claude上の仕組み／各社のAPI） ----------
+  const PROVIDERS = {
+    anthropic: { label: 'Claude（Anthropic API）', model: 'claude-haiku-5-5', keyHint: 'sk-ant-…', site: 'console.anthropic.com' },
+    openai:    { label: 'ChatGPT（OpenAI API）', model: 'gpt-5.6-luna', keyHint: 'sk-…', site: 'platform.openai.com' },
+    xai:       { label: 'Grok（xAI API）', model: 'grok-4.7', keyHint: 'xai-…', site: 'console.x.ai' },
+  };
+  const CFG_KEY = 'nazo_no_doukutsu_ai';
+  let cfg = { provider: 'auto', keys: {}, models: {}, remember: false };
+
+  function loadCfg() {
+    for (const st of [() => sessionStorage, () => localStorage]) {
+      try {
+        const raw = st().getItem(CFG_KEY);
+        if (raw) { cfg = Object.assign(cfg, JSON.parse(raw)); return; }
+      } catch (e) { /* 保存先が使えない環境 */ }
+    }
+  }
+  function saveCfg() {
+    const data = JSON.stringify(cfg);
+    try { sessionStorage.setItem(CFG_KEY, data); } catch (e) {}
+    try { if (cfg.remember) localStorage.setItem(CFG_KEY, data); else localStorage.removeItem(CFG_KEY); } catch (e) {}
+  }
+
+  // いま実際に使う接続先（使えなければ null）
+  function activeProvider() {
+    if (cfg.provider === 'off') return null;
+    if (cfg.provider === 'auto') return sample && !disabledReason ? 'builtin' : null;
+    return cfg.keys[cfg.provider] ? cfg.provider : null;
+  }
+  function aiReady() { return !!activeProvider(); }
+  function providerLabel() {
+    const p = activeProvider();
+    return p === 'builtin' ? 'Claude' : p ? PROVIDERS[p].label.split('（')[0] : '';
+  }
+
+  // AIに尋ねる。onText があれば途中経過も受け取る
+  async function askAI(prompt, opts = {}) {
+    const p = activeProvider();
+    if (!p) throw { code: 'no_ai' };
+    if (p === 'builtin') {
+      const res = await sample(prompt, { modelTier: 'quick', cache: false, signal: opts.signal, onText: opts.onText });
+      return (res && res.text) || '';
+    }
+    const key = cfg.keys[p];
+    const model = (cfg.models[p] || PROVIDERS[p].model).trim();
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 40000);
+    if (opts.signal) opts.signal.addEventListener('abort', () => ctrl.abort());
+    try {
+      let res, data;
+      if (p === 'anthropic') {
+        res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST', signal: ctrl.signal,
+          headers: {
+            'content-type': 'application/json', 'x-api-key': key,
+            'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body: JSON.stringify({ model, max_tokens: 500, messages: [{ role: 'user', content: prompt }] }),
+        });
+        data = await res.json().catch(() => ({}));
+        if (!res.ok) throw { code: 'api_error', status: res.status, message: (data.error && data.error.message) || res.statusText };
+        return (data.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
+      }
+      const url = p === 'openai' ? 'https://api.openai.com/v1/chat/completions' : 'https://api.x.ai/v1/chat/completions';
+      res = await fetch(url, {
+        method: 'POST', signal: ctrl.signal,
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+        body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }] }),
+      });
+      data = await res.json().catch(() => ({}));
+      if (!res.ok) throw { code: 'api_error', status: res.status, message: (data.error && (data.error.message || data.error)) || res.statusText };
+      const msg = data.choices && data.choices[0] && data.choices[0].message;
+      return (msg && msg.content) || '';
+    } catch (e) {
+      if (e && e.code) throw e;
+      throw { code: 'network', message: e && e.name === 'AbortError' ? '時間切れ' : 'つながらない（ブラウザからの接続が許可されていない可能性）' };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function errText(e) {
+    if (!e) return '不明なエラー';
+    if (e.status === 401 || e.status === 403) return 'APIキーが正しくないか、権限がありません';
+    if (e.status === 404) return 'モデル名が見つかりません（AI設定でモデル名を確かめてください）';
+    if (e.status === 429) return '使いすぎか残高不足です';
+    return `${e.status ? e.status + ' ' : ''}${String(e.message || e.code).slice(0, 80)}`;
+  }
 
   function updateBadge() {
     const b = $('chat-mode');
     if (!b) return;
-    b.textContent = aiReady() ? 'AI会話' : '会話';
-    b.title = aiReady() ? 'Claude が仲間の言葉を考えます' : 'Claude 上で開くと、仲間と自由に会話できます';
+    b.textContent = aiReady() ? `AI：${providerLabel()}` : '会話';
+    b.title = aiReady() ? `${providerLabel()} が仲間の言葉を考えます` : 'メニューの「AI設定」でAIにつなげます';
     b.classList.toggle('on', aiReady());
+  }
+
+  // ---------- AI設定の画面 ----------
+  function openSettings(fromTitle) {
+    const inClaude = !!sample;
+    const prov = cfg.provider;
+    const ext = PROVIDERS[prov];
+    const hasKey = ext && cfg.keys[prov];
+    const html = `
+      <div class="profile-form">
+        <label>使うAI
+          <select id="ai-provider">
+            <option value="auto" ${prov === 'auto' ? 'selected' : ''}>自動（Claude上で開いた時はClaude）</option>
+            ${Object.entries(PROVIDERS).map(([k, v]) => `<option value="${k}" ${prov === k ? 'selected' : ''}>${v.label}</option>`).join('')}
+            <option value="off" ${prov === 'off' ? 'selected' : ''}>使わない（決まった台詞）</option>
+          </select>
+        </label>
+        ${ext ? `
+        <label>APIキー ${hasKey ? '<span class="ok-mark">設定済み</span>' : ''}
+          <input id="ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="${hasKey ? '（変える時だけ入力）' : ext.keyHint}">
+        </label>
+        <label>モデル名<input id="ai-model" value="${esc(cfg.models[prov] || ext.model)}" spellcheck="false"></label>
+        <label class="check"><input id="ai-remember" type="checkbox" ${cfg.remember ? 'checked' : ''}> このブラウザにキーを覚えさせる（外すと、タブを閉じた時に消えます）</label>
+        <div class="warn">
+          ・キーはこの端末のブラウザにだけ保存し、選んだAI会社（${ext.site}）以外には送りません。<br>
+          ・料金はキーの持ち主に請求されます。キーは他人に教えないでください。<br>
+          ・共用のパソコンでは「覚えさせる」を付けないでください。<br>
+          ${inClaude ? '・Claude上のプレビューでは外部のAPIにつながりません。「自動」を選んでください。<br>' : ''}
+          ・つながらない時は、そのAI会社がブラウザからの接続を許していない可能性があります。
+        </div>` : `<div class="dim2">${prov === 'auto' ? (inClaude ? 'いまはClaude上で開いているので、Claudeが答えます。' : 'いまはClaude上ではないため、決まった台詞で答えます。各社のAPIキーを持っていれば、上で選んでつなげます。') : '仲間は決まった台詞で答えます。'}</div>`}
+        <div class="shop-row-btns">
+          <button class="shop-btn" id="ai-save">保存する</button>
+          ${ext ? '<button class="shop-btn" id="ai-test">接続テスト</button>' : ''}
+          ${hasKey ? '<button class="shop-btn" id="ai-clear">キーを消す</button>' : ''}
+        </div>
+        <div id="ai-test-result" class="dim2"></div>
+      </div>`;
+    openShop('[ AI設定 ]', html);
+    const apply = () => {
+      cfg.provider = $('ai-provider').value;
+      if (ext && cfg.provider === prov) {
+        const k = $('ai-key').value.trim();
+        if (k) cfg.keys[prov] = k.slice(0, 300);
+        const m = $('ai-model').value.trim();
+        if (m) cfg.models[prov] = m.slice(0, 80);
+        cfg.remember = $('ai-remember').checked;
+      }
+      saveCfg();
+      updateBadge();
+    };
+    $('ai-provider').addEventListener('change', () => { apply(); openSettings(fromTitle); });
+    $('ai-save').addEventListener('click', () => { apply(); Sound.sfx('chest'); $('ai-test-result').textContent = '保存しました。'; });
+    $('ai-clear')?.addEventListener('click', () => { delete cfg.keys[prov]; saveCfg(); updateBadge(); openSettings(fromTitle); });
+    $('ai-test')?.addEventListener('click', async () => {
+      apply();
+      const out = $('ai-test-result');
+      out.textContent = 'つないでいます…';
+      try {
+        const t = await askAI('「接続できました」とだけ日本語で答えてください。');
+        out.textContent = `成功：${String(t).slice(0, 60)}`;
+      } catch (e) {
+        out.textContent = `失敗：${errText(e)}`;
+      }
+    });
   }
 
   // 話せる相手の一覧
@@ -77,7 +230,7 @@ const Chat = (() => {
         : '話し相手がいない。<br>町には仲間になってくれる人がいる。話しかけてみよう。');
       return;
     }
-    const rows = `<div class="dim2 talk-note">${aiReady() ? '仲間と自由に会話できます（Claude が答えます）' : '仲間と会話できます。<br>Claude 上で開くと、どんな話題にも自由に答えてくれます。'}</div>
+    const rows = `<div class="dim2 talk-note">${aiReady() ? `仲間と自由に会話できます（${providerLabel()} が答えます）` : '仲間と会話できます。<br>メニューの「AI設定」でAIにつなぐと、どんな話題にも自由に答えてくれます。'}</div>
       <div class="member-picker">${ps.map(id => {
         const m = game.party.find(x => x.companion === id);
         const face = id === 'princess' ? Art.princessInline(28) : Art.heroInline(m.job, m.weapon, m.armor, 28);
@@ -200,13 +353,15 @@ ${p.name}:`;
     if (aiReady()) {
       abort = new AbortController();
       try {
-        const res = await sample(buildPrompt(id, text), {
-          modelTier: 'quick', cache: false, signal: abort.signal,
-          onText: ({ text: t }) => { if (current === id) { bubble.classList.remove('thinking'); bubble.textContent = t; scroll(); } },
+        const t = await askAI(buildPrompt(id, text), {
+          signal: abort.signal,
+          onText: ({ text: tt }) => { if (current === id) { bubble.classList.remove('thinking'); bubble.textContent = tt; scroll(); } },
         });
-        answer = cleanup(res && res.text);
+        answer = cleanup(t);
       } catch (e) {
-        if (e && e.code === 'not_granted') {
+        if (e && (e.code === 'api_error' || e.code === 'network')) {
+          answer = offlineReply(id, text) + `（AIにつながりませんでした：${errText(e)}）`;
+        } else if (e && e.code === 'not_granted') {
           disabledReason = 'not_granted';
           updateBadge();
           answer = offlineReply(id, text) + '（AI会話が許可されなかったため、決まった台詞で答えています）';
@@ -280,8 +435,8 @@ ${p.name}:`;
     const p = who(id), h = hero();
     const convo = fresh.map(x => `${x.role === 'user' ? h.name : p.name}: ${x.text}`).join('\n');
     try {
-      const res = await sample(`次の会話を、${p.name}の視点から「記憶」として日本語の一文（30字以内、です・ます調にしない、「〜と話した」「〜を知った」などの形）に要約してください。要約だけを書くこと。\n\n${convo}`, { modelTier: 'quick', cache: false });
-      const t = cleanup(res && res.text).replace(/[。]$/, '').slice(0, 60);
+      const res = await askAI(`次の会話を、${p.name}の視点から「記憶」として日本語の一文（30字以内、です・ます調にしない、「〜と話した」「〜を知った」などの形）に要約してください。要約だけを書くこと。\n\n${convo}`, {});
+      const t = cleanup(res).replace(/[。]$/, '').slice(0, 60);
       if (t) addMemory(id, t);
     } catch (e) { /* 記憶に残せなくても会話には影響しない */ }
   }
@@ -330,8 +485,8 @@ ${situation()}
 ・各行は「名前：台詞」の形で、台詞は40字以内。設定の性格・口調・記憶を生かし、互いや主人公に話しかける。
 ・地の文、説明、マークダウンは書かない。`;
       try {
-        const res = await sample(prompt, { modelTier: 'quick', cache: false });
-        lines = parseScene(res && res.text, ids);
+        const res = await askAI(prompt);
+        lines = parseScene(res, ids);
       } catch (e) {
         if (e && e.code === 'not_granted') { disabledReason = 'not_granted'; updateBadge(); }
       }
@@ -388,7 +543,7 @@ ${situation()}
     document.querySelectorAll('[data-chip]').forEach(b => b.addEventListener('click', () => send(b.dataset.chip)));
   }
 
-  return { init, bind, openTalkMenu, aiReady, close, scene, PERSONAS };
+  return { init, bind, openTalkMenu, openSettings, aiReady, close, scene, PERSONAS };
 })();
 
 Chat.bind();

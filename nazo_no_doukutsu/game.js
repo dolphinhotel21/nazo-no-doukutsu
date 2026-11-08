@@ -2722,6 +2722,9 @@ function initEvents() {
     document.addEventListener(ev, unlockOnce, { passive: true }));
 
   document.addEventListener('keydown', e => {
+    // 文字入力欄では、キー操作をそのまま入力に使う
+    const tag = e.target && e.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     if (cursor.context) {
       if (e.key === 'Tab' || e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); moveCursor(1); }
       else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); moveCursor(-1); }
@@ -2787,6 +2790,8 @@ function initEvents() {
   $('btn-menu-close').addEventListener('click', toggleMenu);
   $('btn-field-party').addEventListener('click', () => { toggleMenu(); openPartyMenu(); });
   $('btn-field-talk').addEventListener('click', () => { toggleMenu(); Chat.openTalkMenu(); });
+  $('btn-ai-settings').addEventListener('click', () => { toggleMenu(); Chat.openSettings(false); });
+  $('btn-ai-title').addEventListener('click', () => { Sound.sfx('select'); Chat.openSettings(true); });
   $('btn-field-item').addEventListener('click', () => { toggleMenu(); openFieldItems(); });
   $('btn-field-magic').addEventListener('click', () => { toggleMenu(); openFieldMagic(); });
   $('btn-save').addEventListener('click', () => { toggleMenu(); openSaveSlotUI(false); });
