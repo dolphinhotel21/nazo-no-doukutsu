@@ -178,9 +178,16 @@ button { font-family: inherit; }
 .status-line { font-size: 13px; color: var(--green-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .status-label { font-size: 11px; color: #0af; }
 .status-divider { height: 1px; background: var(--line); }
-#st-hero { display: flex; justify-content: center; margin-bottom: 4px; }
-#st-hero svg { image-rendering: pixelated; }
-#status-panel .bar-num { font-size: 11px; min-width: 52px; text-align: right; align-self: center; }
+#party-status { display: flex; flex-direction: column; gap: 6px; }
+.pm-card { display: flex; gap: 6px; align-items: center; padding: 3px; border: 1px solid #12241a; }
+.pm-card.dead { opacity: 0.45; filter: grayscale(1); }
+.pm-face svg { image-rendering: pixelated; display: block; }
+.pm-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pm-name { font-size: 12px; color: #cfe; display: flex; justify-content: space-between; gap: 4px; white-space: nowrap; overflow: hidden; }
+.pm-lv { color: #6a8; font-size: 10px; }
+.pm-info .bar { height: 7px; min-width: 30px; }
+.st-meta { display: flex; justify-content: space-between; gap: 8px; }
+#status-panel .bar-num { font-size: 10px; min-width: 46px; text-align: right; align-self: center; }
 .items-list { font-size: 12px; color: #aaa; display: flex; flex-direction: column; gap: 2px; }
 #btn-menu { margin-top: auto; }
 
@@ -222,33 +229,48 @@ button { font-family: inherit; }
 
 #battle-header { text-align: center; color: #ff5555; font-size: 16px; border-bottom: 1px solid #333; padding-bottom: 8px; }
 
-/* 左に主人公、右に敵 */
+/* 左に味方、右に敵 */
+#battle-head { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #333; padding-bottom: 6px; }
+#battle-head #battle-header { flex: 1; border: none; padding: 0; text-align: left; }
+#btn-target-mode {
+  background: #0a1430; color: #8ab4ff; border: 1px solid #3a5aaa; font-size: 12px;
+  padding: 4px 10px; cursor: pointer; white-space: nowrap;
+}
+#btn-target-mode.manual { background: #2a1a05; color: #ffcc66; border-color: #aa7a2a; }
 #battle-stage {
   position: relative;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  align-items: end;
-  padding: 8px 4px 4px;
-  border: 1px solid #1a2a3a;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  padding: 6px; border: 1px solid #1a2a3a;
   background: radial-gradient(ellipse at 50% 85%, rgba(40, 60, 120, 0.25), transparent 70%);
 }
-.fighter { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
-.fighter-sprite { min-height: 100px; display: flex; align-items: flex-end; justify-content: center; }
-.fighter-sprite svg { image-rendering: pixelated; filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.12)); }
-#battle-hero svg { filter: drop-shadow(0 0 6px rgba(80, 140, 255, 0.35)); }
-.fighter-name { font-size: 15px; color: #cfe0ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.fighter-name.enemy { color: #ff8888; }
-.fighter-status { font-size: 12px; min-height: 15px; color: #c6f; }
-#battle-enemy-sprite.dead { animation: vanish 0.8s ease forwards; }
-#battle-enemy-sprite.appear { animation: appear 0.45s ease-out; }
-#battle-hero.dead { animation: fallen 0.8s ease forwards; }
-#battle-hero.flee { animation: flee 0.6s ease-in forwards; }
-.casting { animation: casting 0.4s ease-out; }
+#bf-party, #bf-enemies { display: flex; flex-direction: column; gap: 4px; justify-content: center; min-width: 0; }
+.bf-row { position: relative; display: flex; align-items: center; gap: 6px; padding: 3px 4px; border: 1px solid transparent; min-width: 0; }
+.bf-row.enemy { flex-direction: row-reverse; text-align: right; }
+.bf-row.enemy .bar-row { flex-direction: row-reverse; }
+.bf-row.enemy .bar-num { align-self: flex-start; }
+.bf-row.big { flex-direction: column; text-align: center; }
+.bf-row.big .bf-info { width: 100%; }
+.bf-row.active { border-color: #4a8aff; background: rgba(40, 80, 200, 0.18); box-shadow: 0 0 10px rgba(80, 140, 255, 0.35); }
+.bf-row.dead { opacity: 0.4; filter: grayscale(1); }
+.bf-sprite { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
+.bf-sprite svg { image-rendering: pixelated; display: block; }
+.bf-sprite.dead { animation: vanish 0.8s ease forwards; }
+.bf-sprite.appear { animation: appear 0.45s ease-out; }
+.bf-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.bf-name { font-size: 13px; color: #cfe0ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bf-name.enemy { color: #ff9a8a; }
+.bf-tag { color: #c6f; font-size: 11px; }
+.bf-info .bar { height: 8px; }
+.bf-info .bar-num { font-size: 10px; }
+#battle-window.targeting[data-target-kind="enemy"] #bf-enemies .bf-row:not(.dead),
+#battle-window.targeting[data-target-kind="ally"] #bf-party .bf-row {
+  cursor: pointer; border-color: #ffcc44; animation: targetblink 0.9s infinite;
+}
+@keyframes targetblink { 50% { background: rgba(255, 200, 60, 0.15); } }
+#bf-enemies[data-count="3"] .bf-sprite svg { width: 48px; height: 48px; }
 @keyframes vanish { to { opacity: 0; transform: scale(1.2); filter: brightness(3); } }
 @keyframes appear { from { opacity: 0; transform: scale(0.6); filter: brightness(3); } }
-@keyframes fallen { to { transform: rotate(-90deg) translateX(-20px); opacity: 0.4; filter: grayscale(1); } }
-@keyframes flee { to { transform: translateX(-120px); opacity: 0; } }
+.casting { animation: casting 0.4s ease-out; }
 @keyframes casting { 0% { filter: brightness(1); } 40% { filter: brightness(2.2) drop-shadow(0 0 12px #8af); } 100% { filter: brightness(1); } }
 
 /* 青い体力バー（減った分は赤く残ってから縮む） */
@@ -337,7 +359,7 @@ button { font-family: inherit; }
   animation: popUp 0.9s ease-out forwards;
   z-index: 5;
 }
-#fighter-player .pop-num { top: 25%; font-size: 24px; }
+.bf-row .pop-num { top: 10%; font-size: 22px; }
 .pop-enemy { color: #fff; }
 .pop-crit { color: #ffd700; font-size: 34px; }
 .pop-magic { color: #9cf; }
@@ -522,4 +544,50 @@ button { font-family: inherit; }
   #battle-window.boss #battle-enemy-sprite svg { width: 100px; height: 100px; }
   #battle-log { height: 70px; font-size: 12px; }
   .battle-btn { padding: 10px; }
+}
+
+/* 町の人・隊列 */
+.npc-mark {
+  position: absolute; top: -2px; right: 0; font-size: calc(var(--tile) * 0.42); line-height: 1;
+  color: #ffd700; text-shadow: 1px 1px 0 #000; animation: bob 1s ease-in-out infinite;
+}
+.tile.ghost { filter: grayscale(1) brightness(0.7); }
+
+/* 誰の分かを選ぶボタン */
+.member-picker { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+.pick-btn {
+  display: flex; align-items: center; gap: 4px; background: #0a1a1a; color: #cdd;
+  border: 1px solid #1a4a4a; padding: 3px 8px 3px 3px; cursor: pointer; font-size: 13px;
+}
+.pick-btn span { display: flex; flex-direction: column; text-align: left; }
+.pick-btn small { color: #7a9; font-size: 10px; }
+.pick-btn.on { border-color: #00ffff; background: #0a2a2a; color: #fff; }
+.pick-btn svg { image-rendering: pixelated; }
+.party-detail { display: flex; gap: 8px; align-items: center; border: 1px solid #1a3a3a; padding: 6px; font-size: 13px; color: #ddd; }
+.party-detail.dead { opacity: 0.6; }
+.pd-face svg { image-rendering: pixelated; display: block; }
+.pd-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.dim2 { color: #8a9a9a; font-size: 12px; }
+#gameover-msg small { color: #777; font-size: 12px; }
+
+@media screen and (max-width: 640px) {
+  #status-panel { flex-direction: column; align-items: stretch; gap: 3px; padding: 4px 6px; }
+  #party-status { flex-direction: row; gap: 4px; }
+  .pm-card { flex: 1; flex-direction: column; align-items: stretch; gap: 1px; padding: 2px 3px; min-width: 0; }
+  .pm-face { display: none; }
+  .pm-name { font-size: 11px; }
+  .pm-lv { display: none; }
+  #status-panel .bar-num { display: none; }
+  .st-meta { align-items: center; }
+  .st-meta .status-line { font-size: 11px; }
+  #btn-menu { position: absolute; right: 6px; bottom: 4px; }
+  #status-panel { position: relative; padding-right: 86px; }
+  #battle-stage { gap: 4px; padding: 4px; }
+  .bf-row { gap: 4px; padding: 2px; }
+  .bf-sprite svg { width: 40px; height: 40px; }
+  .bf-row.big .bf-sprite svg { width: 96px; height: 96px; }
+  #bf-enemies[data-count="3"] .bf-sprite svg { width: 36px; height: 36px; }
+  .bf-name { font-size: 11px; }
+  .bf-info .bar-num { display: none; }
+  #battle-head #battle-header { font-size: 13px; }
 }

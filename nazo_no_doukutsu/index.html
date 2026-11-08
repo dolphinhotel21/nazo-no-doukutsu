@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="謎の洞窟">
-  <meta name="description" content="暗黒竜にさらわれた姫を救え。入るたびに形が変わる洞窟を潜るレトロ風RPG。">
+  <meta name="description" content="暗黒竜にさらわれた姫を救え。仲間と3人で洞窟に挑むレトロ風RPG。">
   <title>謎の洞窟</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -86,35 +86,12 @@
     <div id="game-main">
       <div id="map-area"><div id="map-container"></div></div>
       <div id="status-panel">
-        <div class="status-block st-who">
-          <div id="st-hero"></div>
-          <div class="status-line" id="st-name">─</div>
-          <div class="status-line" id="st-job">─</div>
-          <div class="status-line" id="st-lv">LV 1</div>
-          <div class="status-line st-exp" id="st-exp">EXP 0</div>
+        <div id="party-status"></div>
+        <div class="st-meta">
+          <span class="status-line" id="st-gold">0 ペリカ</span>
+          <span class="status-line" id="st-location">町</span>
         </div>
-        <div class="status-divider"></div>
-        <div class="status-block st-vital">
-          <div class="bar-row"><span class="bar-label">HP</span><div class="bar" id="sp-hp"><div class="bar-lag"></div><div class="bar-fill"></div></div><span class="bar-num" id="sp-hp-num"></span></div>
-          <div class="bar-row"><span class="bar-label">MP</span><div class="bar mp" id="sp-mp"><div class="bar-lag"></div><div class="bar-fill"></div></div><span class="bar-num" id="sp-mp-num"></span></div>
-          <div class="status-line" id="st-atk">攻</div>
-          <div class="status-line" id="st-def">防</div>
-        </div>
-        <div class="status-divider"></div>
-        <div class="status-block st-equip">
-          <div class="status-line" id="st-weapon">武: ─</div>
-          <div class="status-line" id="st-armor">防: ─</div>
-        </div>
-        <div class="status-divider"></div>
-        <div class="status-block st-where">
-          <div class="status-line" id="st-gold">0 ペリカ</div>
-          <div class="status-line" id="st-location">町</div>
-        </div>
-        <div class="status-divider st-items-wrap"></div>
-        <div class="status-block st-items-wrap">
-          <div class="status-label">道具</div>
-          <div id="st-items" class="items-list"></div>
-        </div>
+        <div class="st-items-wrap"><div class="status-label">道具</div><div id="st-items" class="items-list"></div></div>
         <button class="btn btn-small" id="btn-menu">メニュー</button>
       </div>
     </div>
@@ -137,24 +114,13 @@
   <!-- バトル -->
   <div id="battle-overlay" class="hidden">
     <div id="battle-window">
-      <div id="battle-header"></div>
+      <div id="battle-head">
+        <div id="battle-header"></div>
+        <button id="btn-target-mode" type="button">狙い：自動</button>
+      </div>
       <div id="battle-stage">
-        <div class="fighter" id="fighter-player">
-          <div class="fighter-sprite" id="battle-hero"></div>
-          <div class="fighter-name" id="battle-hero-name"></div>
-          <div class="bar-row"><span class="bar-label">HP</span><div class="bar" id="bh-hp"><div class="bar-lag"></div><div class="bar-fill"></div></div></div>
-          <div class="bar-num" id="bh-hp-num"></div>
-          <div class="bar-row"><span class="bar-label">MP</span><div class="bar mp" id="bh-mp"><div class="bar-lag"></div><div class="bar-fill"></div></div></div>
-          <div class="bar-num" id="bh-mp-num"></div>
-          <div class="fighter-status" id="battle-hero-status"></div>
-        </div>
-        <div class="fighter" id="fighter-enemy">
-          <div class="fighter-sprite" id="battle-enemy-sprite"></div>
-          <div class="fighter-name enemy" id="battle-enemy-name"></div>
-          <div class="bar-row"><span class="bar-label">HP</span><div class="bar enemy" id="be-hp"><div class="bar-lag"></div><div class="bar-fill"></div></div></div>
-          <div class="bar-num" id="be-hp-num"></div>
-          <div class="fighter-status" id="battle-status-msg"></div>
-        </div>
+        <div id="bf-party"></div>
+        <div id="bf-enemies"></div>
         <div id="fx-layer"></div>
       </div>
       <div id="battle-turn-msg"></div>
@@ -189,6 +155,7 @@
   <div id="menu-overlay" class="hidden">
     <div id="menu-window">
       <div class="menu-title">メニュー</div>
+      <button class="btn" id="btn-field-party">なかま</button>
       <button class="btn" id="btn-field-item">どうぐ</button>
       <button class="btn" id="btn-field-magic">まほう</button>
       <button class="btn touch-only" id="btn-toggle-dpad">十字キー：表示中</button>
@@ -212,6 +179,7 @@
     <div class="gameover-container">
       <h1 class="gameover-title">GAME OVER</h1>
       <p id="gameover-msg">力尽きた…</p>
+      <button class="btn" id="btn-go-revive">城で目覚める</button>
       <button class="btn" id="btn-go-load">ロードする</button>
       <button class="btn" id="btn-go-title">タイトルへ</button>
     </div>

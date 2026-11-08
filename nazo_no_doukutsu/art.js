@@ -227,6 +227,57 @@ const Art = (() => {
     '........',
   ];
 
+  const MOUNTAIN = [
+    '...ww...',
+    '..wwab..',
+    '..aabb..',
+    '.aaabbb.',
+    '.abaabb.',
+    'aaaaabbb',
+    'aaaabbbb',
+    '........',
+  ];
+  const FOREST = [
+    '.ff...ff',
+    'fjff.fjf',
+    'ffff.fff',
+    '.tt...t.',
+    '...ff...',
+    '..fjff..',
+    '..ffff..',
+    '...tt...',
+  ];
+  const TOWN_ICON = [
+    '.rr..bb.',
+    'rrrrbbbb',
+    '.ww..ww.',
+    '.wd..wd.',
+    '........',
+    '..rrrr..',
+    '.rrrrrr.',
+    '..wwdw..',
+  ];
+  const BRIDGE = [
+    'pppppppp',
+    'oooooooo',
+    'pppppppp',
+    'oooooooo',
+    'pppppppp',
+    'oooooooo',
+    'pppppppp',
+    'oooooooo',
+  ];
+  const PATH = [
+    'dddddddd',
+    'ddeddddd',
+    'dddddded',
+    'dddddddd',
+    'dedddddd',
+    'ddddeddd',
+    'dddddddd',
+    'dddeddde',
+  ];
+
   const PLAYER = [
     '..hhhh..',
     '.hhhhhh.',
@@ -258,7 +309,7 @@ const Art = (() => {
   function themeOf(mapId) { return THEMES[mapId] || THEMES.dungeon1; }
 
   function floorTile(mapId) {
-    if (mapId === 'town') return url('grass', GRASS, { g: '#3f7d30', h: '#346b28', H: '#4f9440' });
+    if (mapId === 'town' || mapId === 'field') return url('grass', GRASS, { g: '#3f7d30', h: '#346b28', H: '#4f9440' });
     const t = themeOf(mapId);
     return url('floor-' + mapId, FLOOR, { d: t.d, e: t.e });
   }
@@ -294,6 +345,12 @@ const Art = (() => {
       case 'f': return { layers: [url('spring-dry', SPRING, { g: '#6a6a7a', w: '#2a2a30', c: '#3a3a40' }), fl] };
       case 'x': return { layers: [url('trap', TRAP, { m: '#9a9aa8' }), fl] };
       case 'P': return { layers: [url('cell', CELL, { a: '#8a8a98', k: '#0a0a10', y: '#f0d040', s: '#f0c8a0', p: '#f070b0' }), fl] };
+      case 'n': return { layers: [url('mountain', MOUNTAIN, { a: '#8a7a5a', b: '#5e4e38', w: '#f0f0f0' }), fl] };
+      case 'q': return { layers: [url('forest', FOREST, { f: '#1e5a1e', j: '#2e7a2e', t: '#5a3a1a' }), url('grass-dark', GRASS, { g: '#2f6a24', h: '#285a1e', H: '#3a7a2e' })] };
+      case 'O': return { layers: [url('townicon', TOWN_ICON, { r: '#c03a2a', b: '#2a5ab8', w: '#f0e0c0', d: '#5a3a1a' }), fl], label: '町' };
+      case 'V': return { layers: [url('cave', CAVE, { m: '#7a6a5a', n: '#5a4a3a', k: '#0a0806' }), fl], label: '洞' };
+      case '=': return { layers: [url('bridge', BRIDGE, { p: '#a0703a', o: '#6a4422' })] };
+      case 'E': return { layers: [url('path', PATH, { d: '#b8995a', e: '#9a7a40' })], label: '出' };
       case 'B': return { layers: [url('boss', BOSS, { r: '#d02a1a', y: '#ffd800', w: '#ffffff' }), fl] };
       case '$': return { layers: [url('treasure', TREASURE, { y: '#ffd700', w: '#ffffff', b: '#e03030' }), fl] };
       default:  return { layers: [fl] }; // 床・隠れた罠など
