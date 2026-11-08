@@ -599,3 +599,6 @@ button { font-family: inherit; }
   #battle-head #battle-header { font-size: 13px; }
   #btn-target-mode, #btn-auto-mode { font-size: 11px; padding: 3px 6px; }
 }
+
+.warp-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; }
+.warp-btn { padding: 10px; font-size: 14px; }

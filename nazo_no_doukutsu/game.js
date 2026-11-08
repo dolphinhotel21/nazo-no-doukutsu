@@ -89,8 +89,11 @@ const SPELLS = {
   protect:  { name: 'プロテクト', type: 'buff',   target: 'ally',  mp: 4, desc: '味方1人の被ダメージ半減', jobs: ['priest'], fx: 'buff' },
   poison:   { name: 'ポイズン',   type: 'debuff', target: 'enemy', mp: 3, desc: '敵1体を毒にする', jobs: ['thief', 'mage'], fx: 'poison' },
   smoke:    { name: 'スモーク',   type: 'escape', target: 'none',  mp: 2, desc: '必ず逃げる（ボス不可）', jobs: ['thief'], fx: 'run' },
+  exit:     { name: 'エスケプ',   type: 'exit',   target: 'none',  mp: 6, desc: '洞窟から一瞬で外へ出る（移動中のみ）', jobs: ['mage', 'priest', 'thief'], fx: 'run' },
+  warp:     { name: 'テレポ',     type: 'warp',   target: 'none',  mp: 10, desc: '町か、行ったことのある階へ飛ぶ（移動中のみ）', jobs: ['mage', 'priest'], fx: 'holy' },
 };
 const MAGIC_SHOP_LIST = [
+  { id: 'exit', price: 150 }, { id: 'warp', price: 400 },
   { id: 'poison', price: 120 }, { id: 'smoke', price: 80 }, { id: 'holy', price: 250 },
   { id: 'blizzard', price: 250 }, { id: 'fullheal', price: 400 }, { id: 'revive', price: 500 },
   { id: 'thunder', price: 650 }, { id: 'healall', price: 700 },
@@ -132,8 +135,11 @@ const CONSUMABLES = {
   antidote:   { name: '毒消し草', effect: 'antidote', power: 0,   price: 12,  sell: 6,  desc: '毒を治す' },
   leaf:       { name: '復活の葉', effect: 'revive',   power: 0,   price: 180, sell: 90, desc: '倒れた仲間を復活' },
   holy_water: { name: '聖水',     effect: 'holy',     power: 0,   price: 60,  sell: 30, desc: '不死の敵に大ダメージ' },
+  thread:     { name: '帰還の糸', effect: 'exit',     power: 0,   price: 35,  sell: 17, desc: '洞窟から外へ出る（移動中のみ）' },
+  warpstone:  { name: '転移の石', effect: 'warp',     power: 0,   price: 160, sell: 80, desc: '町か、行ったことのある階へ飛ぶ（移動中のみ）' },
 };
-const ITEM_SHOP_LIST = ['herb', 'super_herb', 'mega_herb', 'ether', 'antidote', 'leaf', 'holy_water'];
+const ITEM_SHOP_LIST = ['herb', 'super_herb', 'mega_herb', 'ether', 'antidote', 'leaf', 'holy_water', 'thread', 'warpstone'];
+const FIELD_SPELL_TYPES = ['heal', 'revive', 'exit', 'warp'];
 
 // 敵データ（type は戦闘グラフィックの種類）
 const ENEMIES = {
@@ -185,7 +191,7 @@ function newGameState() {
     maps: {},
     currentMap: 'town',
     explored: {},
-    flags: { golemDefeated: false, bossDefeated: false, hasTreasure: false, princessRescued: false, legendTaken: false },
+    flags: { golemDefeated: false, bossDefeated: false, hasTreasure: false, princessRescued: false, legendTaken: false, deepest: 0 },
     stats: { steps: 0, kills: 0 },
     trail: [],             // 隊列（直前の位置）
     messages: ['', '', ''],
@@ -717,6 +723,8 @@ function changeMap(target, how) {
     p.x = found ? found.x : m.startX; p.y = found ? found.y : m.startY;
   } else { p.x = m.startX; p.y = m.startY; }
   game.trail = [];
+  const no = DUNGEONS.indexOf(target) + 1;
+  if (no > (game.flags.deepest || 0)) game.flags.deepest = no;
   markExplored();
   playMapBgm();
   renderAll();
@@ -1264,7 +1272,7 @@ function openMagicSubMenu() {
     const b = document.createElement('button');
     b.className = 'battle-btn';
     b.textContent = `${sp.name} (MP${sp.mp}) ${sp.desc}`;
-    b.disabled = m.mp < sp.mp || (sp.target === 'dead' && !game.party.some(x => x.hp <= 0));
+    b.disabled = m.mp < sp.mp || (sp.target === 'dead' && !game.party.some(x => x.hp <= 0)) || ['exit', 'warp'].includes(sp.type);
     b.addEventListener('click', () => {
       if (!canAct()) return;
       if (sp.target === 'enemy') requestTarget({ type: 'spell', sid }, 'enemy');
@@ -1288,7 +1296,7 @@ function openItemSubMenu() {
     const b = document.createElement('button');
     b.className = 'battle-btn';
     b.textContent = `${c.name} ×${it.count}  ${c.desc}`;
-    b.disabled = c.effect === 'revive' && !game.party.some(x => x.hp <= 0);
+    b.disabled = (c.effect === 'revive' && !game.party.some(x => x.hp <= 0)) || ['exit', 'warp'].includes(c.effect);
     b.addEventListener('click', () => {
       if (!canAct()) return;
       const kind = c.effect === 'holy' ? 'enemy' : c.effect === 'revive' ? 'dead' : 'ally';
@@ -1784,6 +1792,7 @@ function openCastle() {
   let text = '王「よく来た、旅の者よ。<br>わが娘ミレーユ姫が、暗黒竜ヴォルガンにさらわれてしまった。<br>竜は町の外、南東の岩山にある謎の洞窟、その最深部に棲むという…。<br>町には腕の立つ者もおる。仲間を集め、どうか姫を救い出してくれ！」';
   if (f.bossDefeated) text = '王「竜を倒したと…!? ならば姫は牢の中じゃ！ 早く連れ帰ってくれ！」';
   else if (f.golemDefeated) text = '王「B3Fの門番を倒したか。竜はさらに奥、B5Fじゃ。<br>B4Fのどこかに、伝説の武器が眠っているとも聞く…」';
+  else if ((f.deepest || 0) >= 2) text += '<br><br>大臣「魔法屋のエスケプやテレポ、道具屋の帰還の糸や転移の石を使えば、洞窟の行き来が楽になりますぞ」';
   else if (game.party.length < 3) text += `<br><br>大臣「仲間は最大2人まで連れて行けますぞ。（いま ${game.party.length - 1}人）」`;
   openDialog('[ 城 ]', text);
 }
@@ -1967,6 +1976,42 @@ function openItemShop() {
   }));
 }
 
+// ---------- 洞窟からの脱出・ワープ ----------
+function inDungeon() { return DUNGEONS.includes(game.currentMap); }
+
+function doExit() {
+  Sound.sfx('stairsUp');
+  flashScreen('holy');
+  changeMap('field', 'fromCave');
+  addMessage('まばゆい光に包まれ、洞窟の外に出た！', '#ffd700');
+}
+
+function warpDestinations() {
+  const list = [{ id: 'town', label: '町' }];
+  for (let i = 1; i <= (game.flags.deepest || 0); i++) list.push({ id: DUNGEONS[i - 1], label: `洞窟 ${MAP_NAMES[DUNGEONS[i - 1]]}` });
+  return list.filter(d => d.id !== game.currentMap);
+}
+
+// 行き先を選んで飛ぶ。onGo は飛ぶ直前に呼ぶ（MPや道具を減らす）
+function openWarpMenu(title, onGo) {
+  const dests = warpDestinations();
+  let rows = '<div class="dialog-text">どこへ飛びますか？</div><div class="warp-list">';
+  rows += dests.map(d => `<button class="shop-btn warp-btn" data-warp="${d.id}">${d.label}</button>`).join('');
+  rows += '</div>';
+  if ((game.flags.deepest || 0) < 5) rows += '<div class="dim">まだ行っていない階には飛べない。</div>';
+  openShop(title, rows);
+  document.querySelectorAll('[data-warp]').forEach(b => b.addEventListener('click', () => {
+    const id = b.dataset.warp;
+    onGo();
+    closeShop();
+    Sound.sfx('holy');
+    flashScreen('holy');
+    if (id === 'town') changeMap('town', 'fromField');
+    else changeMap(id, 'down');
+    addMessage(`光に包まれ、${id === 'town' ? '町' : MAP_NAMES[id]}へ飛んだ！`, '#ffd700');
+  }));
+}
+
 // ---------- フィールドで道具・魔法を使う ----------
 function targetButtons(attr, filter) {
   return `<div class="member-picker">${game.party.map((m, i) => filter(m)
@@ -1974,6 +2019,18 @@ function targetButtons(attr, filter) {
 }
 
 function openFieldItems(selected) {
+  if (selected && CONSUMABLES[selected].effect === 'exit') {
+    if (!inDungeon()) { openDialog('[ 帰還の糸 ]', '洞窟の中でしか使えない。'); return; }
+    consumeItem(selected);
+    closeShop();
+    doExit();
+    return;
+  }
+  if (selected && CONSUMABLES[selected].effect === 'warp') {
+    if (!warpDestinations().length) { openDialog('[ 転移の石 ]', '飛べる場所がない。'); return; }
+    openWarpMenu('[ 転移の石 ]', () => consumeItem(selected));
+    return;
+  }
   if (selected) {
     const c = CONSUMABLES[selected];
     const filter = c.effect === 'revive' ? m => m.hp <= 0 : m => m.hp > 0;
@@ -1997,12 +2054,23 @@ function openFieldItems(selected) {
 }
 
 function openFieldMagic(casterIdx, sid) {
-  const casters = game.party.map((m, i) => i).filter(i => game.party[i].hp > 0 && game.party[i].spells.some(s => ['heal', 'revive'].includes(SPELLS[s].type)));
+  const casters = game.party.map((m, i) => i).filter(i => game.party[i].hp > 0 && game.party[i].spells.some(s => FIELD_SPELL_TYPES.includes(SPELLS[s].type)));
   if (!casters.length) { openDialog('[ まほう ]', 'ここで使える魔法を覚えている仲間がいない。'); return; }
   if (casterIdx === undefined) casterIdx = casters[0];
   const m = game.party[casterIdx];
   if (sid) {
     const sp = SPELLS[sid];
+    if (sp.type === 'exit') {
+      m.mp -= sp.mp;
+      closeShop();
+      addMessage(`${m.name}は${sp.name}を唱えた！`, '#aaf');
+      doExit();
+      return;
+    }
+    if (sp.type === 'warp') {
+      openWarpMenu(`[ ${m.name}の${sp.name} ]`, () => { m.mp -= sp.mp; });
+      return;
+    }
     if (sp.target === 'party') {
       m.mp -= sp.mp;
       alive().forEach(t => { t.hp = Math.min(t.maxHp, t.hp + spellPower(sid, m)); });
@@ -2026,9 +2094,10 @@ function openFieldMagic(casterIdx, sid) {
     const c = game.party[i];
     return `<button class="pick-btn ${i === casterIdx ? 'on' : ''}" data-caster="${i}">${Art.heroInline(c.job, c.weapon, c.armor, 28)}<span>${esc(c.name)}<small>MP${c.mp}</small></span></button>`;
   }).join('')}</div>`;
-  for (const s of m.spells.filter(s => ['heal', 'revive'].includes(SPELLS[s].type))) {
+  for (const s of m.spells.filter(s => FIELD_SPELL_TYPES.includes(SPELLS[s].type))) {
     const sp = SPELLS[s];
-    const dis = m.mp < sp.mp || (sp.type === 'revive' && !game.party.some(t => t.hp <= 0));
+    const dis = m.mp < sp.mp || (sp.type === 'revive' && !game.party.some(t => t.hp <= 0))
+      || (sp.type === 'exit' && !inDungeon()) || (sp.type === 'warp' && !warpDestinations().length);
     rows += `<div class="shop-item-row ${dis ? 'disabled' : ''}"><span class="shop-item-name">${sp.name}<small>MP${sp.mp} ${sp.desc}</small></span>
       <button class="shop-btn" data-cast="${s}" ${dis ? 'disabled' : ''}>唱える</button></div>`;
   }
@@ -2491,7 +2560,7 @@ function toggleMenu() {
   if (ov.classList.contains('hidden')) {
     ov.classList.remove('hidden');
     game.inputEnabled = false;
-    $('btn-field-magic').disabled = !game.party.some(m => m.hp > 0 && m.spells.some(s => ['heal', 'revive'].includes(SPELLS[s].type)));
+    $('btn-field-magic').disabled = !game.party.some(m => m.hp > 0 && m.spells.some(s => FIELD_SPELL_TYPES.includes(SPELLS[s].type)));
     setCursorContext('menu');
   } else {
     cursor.context = null;
