@@ -35,7 +35,7 @@ const TILE = {
   WALL: '#', FLOOR: '.',
   STAIR_DOWN: '>', STAIR_UP: '<',
   HOUSE: 'H', INN: 'I', MAGIC_SHOP: 'M', WEAPON_SHOP: 'W', ARMOR_SHOP: 'A', ITEM_SHOP: 'T',
-  CASTLE: 'K', TOWN_EXIT: 'E',
+  CASTLE: 'K', TOWN_EXIT: 'E', ONSEN: 'S', FOOD: 'G',
   TREE: 'Y', WATER: '~', FLOWER: '*',
   MOUNTAIN: 'n', FOREST: 'q', BRIDGE: '=', TOWN_ICON: 'O', CAVE_ICON: 'V',
   CHEST: 'C', LEGEND_CHEST: 'L', CHEST_OPEN: 'c',
@@ -63,6 +63,41 @@ const JOBS = {
   priest:  { name: '僧侶', base: { hp: 30, mp: 18, atk: 8, def: 7 }, growth: { hp: 6, mp: 4, atk: 2, def: 2 }, spells: ['heal', 'protect'], weapon: 'thin_staff' },
   thief:   { name: '盗賊', base: { hp: 32, mp: 8, atk: 11, def: 7 }, growth: { hp: 6, mp: 2, atk: 3, def: 2 }, spells: ['smoke', 'poison'], weapon: 'dagger' },
 };
+
+// 仲間・姫・主人公の設定（ゲーム中に書き換えられる。AI会話はこれを見て答える）
+const DEFAULT_PROFILES = {
+  hero: { gender: '秘密', age: '', personality: '', memories: [] },
+  ares: { name: 'アレス', gender: '男性', age: 19,
+    personality: '熱血で真っ直ぐ。一人称は「俺」。主人公を「相棒」と呼ぶ。ミレーユ姫を心から慕い、守れなかったことを悔やんでいる。言葉は短く力強い。',
+    memories: ['城の兵士として姫の護衛についていたが、竜の襲撃を止められなかった'] },
+  rina: { name: 'リナ', gender: '女性', age: 16,
+    personality: '勝ち気で自信家。一人称は「あたし」。「〜じゃない」「〜でしょ」「ふふん」が口癖。素直になれないが仲間思い。炎の魔法と甘い物が好き。',
+    memories: ['魔法屋の看板娘。父に一人前と認めてほしいと思っている'] },
+  sera: { name: 'セラ', gender: '女性', age: 22,
+    personality: '穏やかで慈愛深い。一人称は「私」。丁寧語で話し、仲間の体を気づかう。芯は強く、闇の魔物には毅然とする。温泉が好き。',
+    memories: ['町の小さな教会で、孤児たちの世話をしてきた'] },
+  jin: { name: 'ジン', gender: '男性', age: 27,
+    personality: '皮肉屋で飄々としている。一人称は「俺」。軽口が多く金にうるさいが、根は情に厚い。語尾は「〜だぜ」「〜だな」。食べ歩きが趣味。',
+    memories: ['各地を渡り歩いてきた流れ者。昔、仲間に裏切られたことがある'] },
+  princess: { name: 'ミレーユ', gender: '女性', age: 17,
+    personality: '気品があり芯が強い王女。一人称は「わたくし」。助けてくれた一行に深く感謝している。',
+    memories: ['嵐の夜、暗黒竜に城からさらわれた', '洞窟の牢で、助けが来ることを信じて待ち続けた'] },
+};
+const MEMORY_MAX = 15;
+const GENDERS = ['男性', '女性', 'その他', '秘密'];
+
+// 記憶を書き足す（古いものから消える）
+function addMemory(id, text) {
+  const pr = game.profiles && game.profiles[id];
+  if (!pr) return;
+  pr.memories.push(String(text).slice(0, 60));
+  while (pr.memories.length > MEMORY_MAX) pr.memories.shift();
+}
+// いま一緒にいる仲間（と姫）全員の記憶に残す
+function addMemoryAll(text) {
+  game.party.forEach(m => { if (m.companion) addMemory(m.companion, text); });
+  if (game.flags.princessRescued) addMemory('princess', text);
+}
 
 // 町で仲間になる人たち
 const COMPANIONS = {
@@ -194,6 +229,7 @@ function newGameState() {
     flags: { golemDefeated: false, bossDefeated: false, hasTreasure: false, princessRescued: false, legendTaken: false, deepest: 0 },
     stats: { steps: 0, kills: 0 },
     trail: [],             // 隊列（直前の位置）
+    profiles: JSON.parse(JSON.stringify(DEFAULT_PROFILES)),
     messages: ['', '', ''],
     inputEnabled: true,
   };
@@ -295,6 +331,9 @@ function createTownMap() {
   for (let y = 16; y <= 18; y++) for (let x = 16; x <= 20; x++) put(x, y, TILE.WATER);
   [[3, 9], [7, 9], [15, 9], [21, 9], [3, 16], [6, 18], [9, 15], [21, 21], [14, 20], [8, 21]].forEach(([x, y]) => put(x, y, TILE.TREE));
   [[6, 4], [18, 4], [11, 8], [13, 8], [4, 14], [10, 17], [15, 14], [20, 20], [3, 20], [17, 21]].forEach(([x, y]) => put(x, y, TILE.FLOWER));
+  // 娯楽：池のほとりの温泉と、屋台通り
+  put(15, 17, TILE.ONSEN);
+  put(6, 15, TILE.FOOD); put(7, 15, TILE.FOOD);
   // 南の出口
   for (let x = 11; x <= 13; x++) { put(x, S - 2, TILE.TOWN_EXIT); put(x, S - 1, TILE.WALL); }
   return { grid: g, entryX: 12, entryY: 22, homeX: 4, homeY: 7, id: 'town' };
@@ -621,6 +660,8 @@ function handleTileEvent(cell) {
     case TILE.WEAPON_SHOP: openEquipShop('weapon'); return;
     case TILE.ARMOR_SHOP: openEquipShop('armor'); return;
     case TILE.ITEM_SHOP: openItemShop(); return;
+    case TILE.ONSEN: openOnsen(); return;
+    case TILE.FOOD: openFood(); return;
     case TILE.TOWN_EXIT:
       changeMap('field', 'fromTown');
       addMessage('町の外に出た。', '#00ff41');
@@ -688,6 +729,8 @@ function handleTileEvent(cell) {
       else {
         game.flags.princessRescued = true;
         setCell(TILE.FLOOR);
+        addMemoryAll(`B5Fの牢から姫を救い出した`);
+        addMemory('princess', `${hero().name}たちに牢から救い出された`);
         Sound.sfx('door');
         openDialog('[ 姫を救い出した！ ]',
           '姫「助けに来てくださったのですね…！<br>さあ、一緒に城へ帰りましょう」<br><br><span style="color:#0af">姫が一行に加わった。町の城へ連れて帰ろう。</span>');
@@ -778,6 +821,7 @@ function openLegendChest() {
   const id = LEGEND_WEAPON[h.job];
   h.weapon = id;
   game.flags.legendTaken = true;
+  addMemoryAll(`${h.name}がB4Fで伝説の武器「${WEAPONS[id].name}」を手に入れた`);
   Sound.sfx('levelup');
   flashScreen('gold');
   openDialog('[ 伝説の武器 ]', `古びた宝箱の中に、<span style="color:#ffd700">${WEAPONS[id].name}</span>が眠っていた！<br>${esc(h.name)}が手に取ると、力がみなぎってくる…<br><br>${esc(h.name)}は${WEAPONS[id].name}を装備した。（攻撃力 +${WEAPONS[id].atk}）`);
@@ -1689,8 +1733,8 @@ function endBattleWin() {
   Sound.bgm(null);
   Sound.sfx('win');
   addBattleLog(`魔物をやっつけた！ 経験値${share}　${totalGold}ペリカ`, '#ffd700');
-  if (bs.kind === 'golem') game.flags.golemDefeated = true;
-  if (bs.kind === 'boss') { game.flags.bossDefeated = true; setCell(TILE.FLOOR); }
+  if (bs.kind === 'golem') { game.flags.golemDefeated = true; addMemoryAll(`${hero().name}たちとB3Fの門番ゴーレムを倒した`); }
+  if (bs.kind === 'boss') { game.flags.bossDefeated = true; setCell(TILE.FLOOR); addMemoryAll(`${hero().name}たちと暗黒竜ヴォルガンを討ち倒した`); }
   let leveled = false;
   aliveMembers().forEach(o => {
     o.m.exp += share;
@@ -1805,23 +1849,25 @@ function openCastle() {
 // ---------- 仲間 ----------
 function talkCompanion(id) {
   const c = COMPANIONS[id];
+  const pname = game.profiles[id].name;
   Sound.sfx('select');
   if (game.party.length >= CONFIG.PARTY_MAX) {
-    openDialog(`[ ${c.name} ]`, `${c.who}${c.hello}<br><br><span style="color:#f99">仲間がいっぱいだ。メニューの「なかま」から誰かを外せば、連れて行ける。</span>`);
+    openDialog(`[ ${esc(pname)} ]`, `${c.who.replace(c.name, esc(pname))}${c.hello}<br><br><span style="color:#f99">仲間がいっぱいだ。メニューの「なかま」から誰かを外せば、連れて行ける。</span>`);
     return;
   }
-  openShop(`[ ${c.name}（${JOBS[c.job].name}） ]`, `
-    <div class="dialog-text">${c.who}${c.hello}</div>
+  openShop(`[ ${pname}（${JOBS[c.job].name}） ]`, `
+    <div class="dialog-text">${c.who.replace(c.name, esc(pname))}${c.hello}</div>
     <div class="shop-row-btns">
       <button class="shop-btn" id="btn-recruit">仲間にする</button>
       <button class="shop-btn" id="btn-recruit-no">やめておく</button>
     </div>`);
   $('btn-recruit').addEventListener('click', () => {
     const lv = Math.max(1, hero().lv - 1);
-    game.party.push(createMember(c.name, c.job, lv, id));
+    game.party.push(createMember(pname, c.job, lv, id));
+    addMemory(id, `${hero().name}に誘われ、姫を救う旅の仲間になった`);
     Sound.sfx('chest');
     closeShop();
-    addMessage(`${c.name}が仲間に加わった！`, '#ffd700');
+    addMessage(`${pname}が仲間に加わった！`, '#ffd700');
     buildStatusPanel();
     renderAll();
   });
@@ -1840,18 +1886,121 @@ function openPartyMenu() {
         <div class="dim2">${WEAPONS[m.weapon].name} ／ ${ARMORS[m.armor].name}　EXP ${m.exp}/${m.expNext}</div>
         <div class="dim2">魔法: ${m.spells.length ? m.spells.map(s => SPELLS[s].name).join('・') : 'なし'}</div>
       </div>
-      ${i > 0 && inTown ? `<button class="shop-btn" data-dismiss="${i}">外す</button>` : ''}
+      <div class="pd-btns">
+        <button class="shop-btn" data-profile="${i === 0 ? 'hero' : m.companion}">設定</button>
+        ${i > 0 && inTown ? `<button class="shop-btn" data-dismiss="${i}">外す</button>` : ''}
+      </div>
     </div>`;
   });
+  if (game.flags.princessRescued) rows += `<div class="party-detail"><div class="pd-face">${Art.princessInline(48)}</div><div class="pd-info"><div><b>${esc(game.profiles.princess.name)}姫</b>　同行中</div></div><div class="pd-btns"><button class="shop-btn" data-profile="princess">設定</button></div></div>`;
   if (!inTown && game.party.length > 1) rows += '<div class="dim">仲間を外すのは町の中でだけできる。</div>';
   if (game.party.length < 3) rows += '<div class="dim">町の人に話しかけると、仲間になってくれる人がいる。</div>';
   openShop('[ なかま ]', rows);
+  document.querySelectorAll('[data-profile]').forEach(b => b.addEventListener('click', () => openProfileEditor(b.dataset.profile)));
   document.querySelectorAll('[data-dismiss]').forEach(b => b.addEventListener('click', () => {
     const m = game.party[parseInt(b.dataset.dismiss, 10)];
     game.party.splice(parseInt(b.dataset.dismiss, 10), 1);
     addMessage(`${m.name}は仲間から外れ、町に戻った。`);
     buildStatusPanel();
     openPartyMenu();
+  }));
+}
+
+// ---------- キャラ設定の編集 ----------
+function openProfileEditor(id) {
+  const pr = game.profiles[id];
+  const isHero = id === 'hero';
+  const member = isHero ? hero() : game.party.find(m => m.companion === id);
+  const fixedName = isHero || id === 'princess';
+  const name = isHero ? hero().name : pr.name;
+  const face = id === 'princess' ? Art.princessInline(40) : Art.heroInline(member.job, member.weapon, member.armor, 40);
+  openShop(`[ ${name}の設定 ]`, `
+    <div class="profile-form">
+      <div class="pf-head">${face}<div class="dim2">${isHero ? 'あなた（主人公）の設定です。仲間はこれを知った上で話します。' : 'ここに書いた内容を見て、AIがこの人物として話します。'}</div></div>
+      <label>名前<input id="pf-name" maxlength="8" value="${esc(name)}" ${fixedName ? 'disabled' : ''}></label>
+      <div class="pf-row">
+        <label>性別<select id="pf-gender">${GENDERS.map(g => `<option ${g === pr.gender ? 'selected' : ''}>${g}</option>`).join('')}</select></label>
+        <label>年齢<input id="pf-age" type="number" min="0" max="999" value="${esc(pr.age)}"></label>
+      </div>
+      <label>${isHero ? '人柄・自己紹介' : '性格・口調'}<textarea id="pf-personality" maxlength="200" rows="3" placeholder="${isHero ? '例：無口だが情に厚い。元は羊飼い。' : '例：明るく元気。一人称は「ボク」。'}">${esc(pr.personality)}</textarea></label>
+      <label>記憶（1行に1つ。冒険の出来事や会話で自動的に増えます／最大${MEMORY_MAX}件）<textarea id="pf-memories" maxlength="1200" rows="6">${esc(pr.memories.join('\n'))}</textarea></label>
+      <div class="shop-row-btns">
+        <button class="shop-btn" id="pf-save">保存する</button>
+        ${isHero ? '' : '<button class="shop-btn" id="pf-reset">初期設定に戻す</button>'}
+      </div>
+    </div>`);
+  $('pf-save').addEventListener('click', () => {
+    if (!fixedName) {
+      const nn = $('pf-name').value.trim().slice(0, 8);
+      if (nn) { pr.name = nn; if (member) member.name = nn; }
+    }
+    pr.gender = GENDERS.includes($('pf-gender').value) ? $('pf-gender').value : '秘密';
+    const age = parseInt($('pf-age').value, 10);
+    pr.age = Number.isFinite(age) ? clamp(age, 0, 999) : '';
+    pr.personality = $('pf-personality').value.trim().slice(0, 200);
+    pr.memories = $('pf-memories').value.split('\n').map(x => x.trim().slice(0, 60)).filter(Boolean).slice(-MEMORY_MAX);
+    Sound.sfx('chest');
+    addMessage(`${isHero ? hero().name : pr.name}の設定を保存した。`, '#0af');
+    buildStatusPanel();
+    openPartyMenu();
+  });
+  $('pf-reset')?.addEventListener('click', () => {
+    game.profiles[id] = JSON.parse(JSON.stringify(DEFAULT_PROFILES[id]));
+    if (member) member.name = game.profiles[id].name;
+    Sound.sfx('select');
+    openProfileEditor(id);
+  });
+}
+
+// ---------- 町の娯楽：温泉・屋台 ----------
+function companionsHere() {
+  const list = game.party.filter(m => m.companion && m.hp > 0).map(m => m.companion);
+  if (game.flags.princessRescued) list.push('princess');
+  return list;
+}
+
+function openOnsen() {
+  const cost = 10 + game.party.length * 10;
+  openShop('[ 温泉「竜の湯」 ]', `
+    <div class="dialog-text">番台「いらっしゃい！ 池のほとりの名湯、竜の湯だよ。<br>${game.party.length}名様で ${cost} ペリカ。旅の疲れも毒も、すっかり流れるよ」<br><small class="dim2">HP・MPが回復し、毒が消える（倒れた仲間は宿屋で）</small></div>
+    ${goldLine()}
+    <div class="shop-row-btns">
+      <button class="shop-btn" id="btn-onsen-go" ${game.gold < cost ? 'disabled' : ''}>湯に浸かる (${cost}P)</button>
+      <button class="shop-btn" id="btn-onsen-no">やめる</button>
+    </div>`);
+  $('btn-onsen-go')?.addEventListener('click', () => {
+    game.gold -= cost;
+    game.party.forEach(m => { if (m.hp > 0) { m.hp = m.maxHp; m.mp = getMaxMp(m); m.poisoned = false; } });
+    Sound.sfx('heal');
+    flashScreen('heal');
+    const who = companionsHere();
+    addMemoryAll(`${hero().name}たちと町の温泉「竜の湯」に浸かった`);
+    Chat.scene('onsen', who, '湯けむりの中、一行は旅の疲れを癒やした。');
+  });
+  $('btn-onsen-no').addEventListener('click', closeShop);
+}
+
+const FOODS = [
+  { id: 'kushi', name: '串焼き', price: 15, desc: '全員のHP+40', hp: 40, mp: 0 },
+  { id: 'dango', name: '蜂蜜だんご', price: 20, desc: '全員のMP+12', hp: 0, mp: 12 },
+  { id: 'dragon', name: '名物ドラゴン焼き', price: 45, desc: '全員のHP+90・MP+10', hp: 90, mp: 10 },
+];
+
+function openFood() {
+  let rows = '<div class="dialog-text">屋台のおやじ「らっしゃい！ 町の名物、食べてきな！」</div>';
+  for (const f of FOODS) {
+    const dis = game.gold < f.price;
+    rows += `<div class="shop-item-row ${dis ? 'disabled' : ''}"><span class="shop-item-name">${f.name}<small>${f.desc}</small></span>
+      <span class="shop-item-price">${f.price}P</span><button class="shop-btn" data-food="${f.id}" ${dis ? 'disabled' : ''}>食べる</button></div>`;
+  }
+  openShop('[ 屋台通り ]', rows + goldLine());
+  document.querySelectorAll('[data-food]').forEach(b => b.addEventListener('click', () => {
+    const f = FOODS.find(x => x.id === b.dataset.food);
+    game.gold -= f.price;
+    game.party.forEach(m => { if (m.hp > 0) { m.hp = Math.min(m.maxHp, m.hp + f.hp); m.mp = Math.min(getMaxMp(m), m.mp + f.mp); } });
+    Sound.sfx('coin');
+    addMemoryAll(`${hero().name}たちと屋台通りで${f.name}を食べ歩いた`);
+    Chat.scene('food', companionsHere(), `一行は屋台で${f.name}をほおばった。`, f.name);
   }));
 }
 
@@ -2131,7 +2280,7 @@ function saveToSlot(slot) {
     party: game.party, gold: game.gold, items: game.items, pos: game.pos,
     currentMap: game.currentMap, maps,
     explored: Object.fromEntries(Object.entries(game.explored).map(([k, v]) => [k, [...v]])),
-    flags: game.flags, stats: game.stats,
+    flags: game.flags, stats: game.stats, profiles: game.profiles,
   };
   store.setItem(CONFIG.SAVE_SLOT_KEY + slot, JSON.stringify(data));
   Sound.sfx('chest');
@@ -2150,6 +2299,7 @@ function loadFromSlot(slot) {
     st.explored = Object.fromEntries(Object.entries(d.explored).map(([k, v]) => [k, new Set(v)]));
     st.flags = Object.assign(st.flags, d.flags);
     st.stats = Object.assign(st.stats, d.stats || {});
+    st.profiles = d.profiles;
     game = st;
     return true;
   } catch (e) {
@@ -2193,6 +2343,21 @@ function sanitizeSave(d) {
     if (!m || !Array.isArray(m.grid) || !m.grid.length || m.grid.some(r => typeof r !== 'string' || r.length !== m.grid.length)) throw new Error('invalid map');
   }
   if (!ids.includes(d.currentMap)) d.currentMap = 'town';
+  const prof = {};
+  for (const [id, def] of Object.entries(DEFAULT_PROFILES)) {
+    const src = (d.profiles && d.profiles[id]) || {};
+    const age = parseInt(src.age, 10);
+    prof[id] = {
+      ...JSON.parse(JSON.stringify(def)),
+      gender: GENDERS.includes(src.gender) ? src.gender : def.gender,
+      age: Number.isFinite(age) ? clamp(age, 0, 999) : def.age,
+      personality: typeof src.personality === 'string' ? src.personality.slice(0, 200) : def.personality,
+      memories: Array.isArray(src.memories) ? src.memories.filter(x => typeof x === 'string').map(x => x.slice(0, 60)).slice(-MEMORY_MAX) : def.memories,
+    };
+    if (def.name && id !== 'princess' && typeof src.name === 'string' && src.name.trim()) prof[id].name = src.name.trim().slice(0, 8);
+  }
+  d.profiles = prof;
+  d.party.forEach(m => { if (m.companion && prof[m.companion]) m.name = prof[m.companion].name; });
   const S = d.maps[d.currentMap].grid.length;
   d.pos = { x: num(d.pos && d.pos.x, 1, 0, S - 1), y: num(d.pos && d.pos.y, 1, 0, S - 1) };
   return d;
@@ -2285,6 +2450,7 @@ function triggerGameOver() {
 }
 
 function reviveAtCastle() {
+  addMemoryAll('洞窟で全滅しかけ、城で王の祈りによって目覚めた');
   game.party.forEach(m => { m.hp = m.maxHp; m.mp = getMaxMp(m); m.poisoned = false; });
   game.gold = Math.floor(game.gold / 2);
   game.currentMap = 'town';

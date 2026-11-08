@@ -636,3 +636,26 @@ button { font-family: inherit; }
 #chat-input { flex: 1; background: #111; color: #fff; border: 1px solid #5a3a8a; padding: 8px; font-family: inherit; font-size: 16px; outline: none; user-select: text; -webkit-user-select: text; }
 #chat-send { background: #2a1a40; color: #e0c0ff; border: 1px solid #c08aff; padding: 0 14px; cursor: pointer; font-size: 14px; }
 #chat-send:disabled { opacity: 0.5; }
+
+/* キャラ設定 */
+.profile-form { display: flex; flex-direction: column; gap: 8px; color: #ddd; font-size: 13px; }
+.profile-form label { display: flex; flex-direction: column; gap: 3px; color: #8ac; font-size: 12px; }
+.profile-form input, .profile-form select, .profile-form textarea {
+  background: #0a0f14; color: #fff; border: 1px solid #2a5a6a; padding: 6px; font-family: inherit; font-size: 15px;
+  user-select: text; -webkit-user-select: text;
+}
+.profile-form textarea { resize: vertical; line-height: 1.5; }
+.profile-form input:disabled { color: #888; }
+.pf-head { display: flex; gap: 8px; align-items: center; }
+.pf-head svg { image-rendering: pixelated; }
+.pf-row { display: flex; gap: 8px; }
+.pf-row label { flex: 1; }
+.pd-btns { display: flex; flex-direction: column; gap: 4px; }
+.talk-note { margin-bottom: 6px; }
+
+/* 温泉・屋台の掛け合い */
+.scene-lines { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.scene-line { display: flex; gap: 6px; align-items: flex-start; font-size: 14px; color: #eee; opacity: 0; animation: fadeUp 0.5s ease forwards; line-height: 1.6; }
+.scene-line b { color: #8cf; white-space: nowrap; font-weight: normal; }
+.scene-line b::after { content: '：'; }
+.scene-face svg { image-rendering: pixelated; display: block; }

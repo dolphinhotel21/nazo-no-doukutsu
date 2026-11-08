@@ -23,6 +23,22 @@ const Chat = (() => {
       voice: '気品があり芯の強い王女。一人称は「わたくし」。助けてくれた一行に深く感謝しており、城へ帰る道中を気丈に励ます。' },
   };
 
+  // 設定（性別・年齢・性格・記憶）を反映した人物像
+  function who(id) {
+    const base = PERSONAS[id];
+    const pr = (game.profiles && game.profiles[id]) || {};
+    return { ...base, name: id === 'princess' ? `${pr.name || 'ミレーユ'}姫` : (pr.name || base.name), profile: pr };
+  }
+  function profileText(id) {
+    const p = who(id), pr = p.profile;
+    const mem = (pr.memories || []).map(m => `・${m}`).join('\n') || '・（特になし）';
+    return `名前: ${p.name}（${p.title}・${p.job}）\n性別: ${pr.gender || '不明'}　年齢: ${pr.age === '' || pr.age === undefined ? '不明' : pr.age + '歳'}\n性格・口調: ${pr.personality || p.voice}\n記憶:\n${mem}`;
+  }
+  function heroText() {
+    const h = hero(), pr = game.profiles.hero || {};
+    return `${h.name}（${JOBS[h.job].name}。性別: ${pr.gender || '秘密'}${pr.age ? `、${pr.age}歳` : ''}${pr.personality ? `。人柄: ${pr.personality}` : ''}）`;
+  }
+
   // 起動時に Claude が使えるか確かめる（使えない環境では何もしない）
   function init() {
     let tries = 0;
@@ -61,11 +77,11 @@ const Chat = (() => {
         : '話し相手がいない。<br>町には仲間になってくれる人がいる。話しかけてみよう。');
       return;
     }
-    const rows = `<div class="dim2" style="margin-bottom:6px">${aiReady() ? '仲間と自由に会話できます（Claude が答えます）' : '仲間と会話できます。<br>Claude 上で開くと、どんな話題にも自由に答えてくれます。'}</div>
+    const rows = `<div class="dim2 talk-note">${aiReady() ? '仲間と自由に会話できます（Claude が答えます）' : '仲間と会話できます。<br>Claude 上で開くと、どんな話題にも自由に答えてくれます。'}</div>
       <div class="member-picker">${ps.map(id => {
         const m = game.party.find(x => x.companion === id);
         const face = id === 'princess' ? Art.princessInline(28) : Art.heroInline(m.job, m.weapon, m.armor, 28);
-        return `<button class="pick-btn" data-talk="${id}">${face}<span>${PERSONAS[id].name}<small>${PERSONAS[id].job}</small></span></button>`;
+        return `<button class="pick-btn" data-talk="${id}">${face}<span>${esc(who(id).name)}<small>${PERSONAS[id].job}</small></span></button>`;
       }).join('')}</div>`;
     openShop('[ はなす ]', rows);
     document.querySelectorAll('[data-talk]').forEach(b => b.addEventListener('click', () => { closeShop(); open(b.dataset.talk); }));
@@ -74,7 +90,7 @@ const Chat = (() => {
   function open(id) {
     current = id;
     game.inputEnabled = false;
-    const p = PERSONAS[id];
+    const p = who(id);
     const m = game.party.find(x => x.companion === id);
     $('chat-face').innerHTML = id === 'princess' ? Art.princessInline(40) : Art.heroInline(m.job, m.weapon, m.armor, 40);
     $('chat-name').textContent = `${p.name}（${p.job}）`;
@@ -95,7 +111,9 @@ const Chat = (() => {
     if (abort) { try { abort.abort(); } catch (e) {} }
     abort = null;
     busy = false;
+    const id = current;
     current = null;
+    if (id) rememberTalk(id);
     $('chat-overlay').classList.add('hidden');
     $('chat-input').blur();
     game.inputEnabled = true;
@@ -117,6 +135,8 @@ const Chat = (() => {
 
   function greeting(id) {
     const h = hero();
+    const pr = game.profiles[id];
+    if (pr && pr.personality !== DEFAULT_PROFILES[id].personality) return `${h.name}、どうしたの？`;
     const lines = {
       ares: `どうした、相棒？ 何でも言ってくれ。`,
       rina: `なによ、${h.name}。あたしに用？`,
@@ -142,18 +162,21 @@ const Chat = (() => {
   }
 
   function buildPrompt(id, userText) {
-    const p = PERSONAS[id];
+    const p = who(id);
     const h = hero();
     const past = history[id].slice(-11, -1).map(x => `${x.role === 'user' ? h.name : p.name}: ${x.text}`).join('\n');
-    return `あなたはレトロ風RPG「謎の洞窟」に登場する${p.title}の${p.name}（${p.job}）として、主人公${h.name}（${JOBS[h.job].name}）と会話します。
-【人物】${p.voice}
-【世界】山あいの小さな王国。暗黒竜ヴォルガンが城を襲いミレーユ姫をさらった。竜は町の外の謎の洞窟（地下5階）の最深部に棲む。洞窟には竜が守る秘宝「竜の瞳」もある。通貨はペリカ。町には城・宿屋・魔法屋・武器屋・防具屋・道具屋がある。エスケプ/帰還の糸で洞窟から出られ、テレポ/転移の石で行ったことのある階へ飛べる。倒れた仲間は宿屋・リザレク・復活の葉で起こせる。
+    return `あなたはレトロ風RPG「謎の洞窟」に登場する${p.title}の${p.name}（${p.job}）として、主人公と会話します。
+【あなたの設定】
+${profileText(id)}
+【主人公】${heroText()}
+【世界】山あいの小さな王国。暗黒竜ヴォルガンが城を襲いミレーユ姫をさらった。竜は町の外の謎の洞窟（地下5階）の最深部に棲む。洞窟には竜が守る秘宝「竜の瞳」もある。通貨はペリカ。町には城・宿屋・魔法屋・武器屋・防具屋・道具屋のほか、池のほとりの温泉「竜の湯」と屋台通りがある。エスケプ/帰還の糸で洞窟から出られ、テレポ/転移の石で行ったことのある階へ飛べる。倒れた仲間は宿屋・リザレク・復活の葉で起こせる。
 【いまの状況】
 ${situation()}
 【これまでの会話】
 ${past || '（なし）'}
 【ルール】
 ・${p.name}として、日本語で1〜3文、80字以内で答える。台詞だけを書き、名前や括弧、記号の飾り、マークダウンは付けない。
+・設定の性別・年齢・性格・口調を守り、記憶にある出来事は自分の体験として覚えている。記憶にないことを体験したふりはしない。
 ・状況（現在地・仲間の傷・進み具合）を踏まえて自然に話す。傷ついた仲間がいれば気にかける。
 ・ゲームの攻略を聞かれたら、上の情報の範囲で${p.name}らしくヒントを出す。知らないことは知らないと言う。
 ・ゲームの外の話題を振られても、この世界の人物として受け答えする。AIであることには触れない。
@@ -248,6 +271,112 @@ ${p.name}:`;
     return '洞窟は町の外、南東の岩山の中だ。橋を渡って、山の切れ目を抜けた先にある。';
   }
 
+  // 会話を終えた時、その内容を記憶に一文で残す（Claude を使える時だけ）
+  async function rememberTalk(id) {
+    const lines = history[id] || [];
+    const fresh = lines.slice(lines.lastSummarized || 0);
+    if (!aiReady() || fresh.filter(x => x.role === 'user').length < 2) return;
+    lines.lastSummarized = lines.length;
+    const p = who(id), h = hero();
+    const convo = fresh.map(x => `${x.role === 'user' ? h.name : p.name}: ${x.text}`).join('\n');
+    try {
+      const res = await sample(`次の会話を、${p.name}の視点から「記憶」として日本語の一文（30字以内、です・ます調にしない、「〜と話した」「〜を知った」などの形）に要約してください。要約だけを書くこと。\n\n${convo}`, { modelTier: 'quick', cache: false });
+      const t = cleanup(res && res.text).replace(/[。]$/, '').slice(0, 60);
+      if (t) addMemory(id, t);
+    } catch (e) { /* 記憶に残せなくても会話には影響しない */ }
+  }
+
+  // 温泉・屋台などでの掛け合い
+  const SCENE_LINES = {
+    onsen: {
+      ares: 'ふう…生き返るな。姫様にも、この湯に浸かってもらいたいもんだ。',
+      rina: 'ちょ、ちょっと！ こっち見ないでよね！ …でも、いいお湯。',
+      sera: '温かい…。旅の疲れが、溶けていくようです。',
+      jin: 'へへ、湯上がりの一杯は格別だぜ。',
+      princess: '城の湯殿より、ずっと心が安らぎますわ。',
+    },
+    food: {
+      ares: 'うまい！ これ、もう一本頼む！',
+      rina: '甘いのはないの？ …あ、これ美味しいじゃない。',
+      sera: '皆さんと食べると、何でも美味しく感じますね。',
+      jin: 'この屋台は当たりだな。俺の舌に間違いはないぜ。',
+      princess: 'こうして町を食べ歩くのは、初めてですわ。',
+    },
+  };
+  const PLACE = { onsen: '町の温泉「竜の湯」（池のほとりの露天風呂。男女は仕切りで分かれている）', food: '町の屋台通り' };
+
+  async function scene(place, ids, narration, foodName) {
+    const h = hero();
+    const box = () => $('shop-content');
+    const title = place === 'onsen' ? '[ 温泉「竜の湯」 ]' : '[ 屋台通り ]';
+    if (!ids.length) {
+      openShop(title, `<div class="dialog-text">${esc(narration)}<br>${place === 'onsen' ? 'ひとりで静かに湯に浸かった。いい湯だ…。' : 'ひとりで味わった。うまい！'}</div>`);
+      return;
+    }
+    openShop(title, `<div class="dialog-text">${esc(narration)}</div><div class="scene-lines" id="scene-lines"><div class="dim2">${aiReady() ? '…（仲間たちが話している）' : ''}</div></div>`);
+    let lines = null;
+    if (aiReady()) {
+      const cast = ids.map(id => profileText(id)).join('\n\n');
+      const names = ids.map(id => who(id).name);
+      const prompt = `レトロ風RPG「謎の洞窟」の一場面を書いてください。
+【場所】${PLACE[place]}${foodName ? `。名物「${foodName}」を食べている` : ''}
+【主人公】${heroText()}（主人公は話さず、聞き役）
+【登場する仲間】
+${cast}
+【いまの状況】
+${situation()}
+【書き方】
+・登場する仲間（${names.join('、')}）だけが話す、4〜6行の和やかな掛け合い。全員が少なくとも1回話す。
+・各行は「名前：台詞」の形で、台詞は40字以内。設定の性格・口調・記憶を生かし、互いや主人公に話しかける。
+・地の文、説明、マークダウンは書かない。`;
+      try {
+        const res = await sample(prompt, { modelTier: 'quick', cache: false });
+        lines = parseScene(res && res.text, ids);
+      } catch (e) {
+        if (e && e.code === 'not_granted') { disabledReason = 'not_granted'; updateBadge(); }
+      }
+    }
+    if (!lines || !lines.length) {
+      // 性格を書き換えた人物には、決まった台詞の代わりに当たり障りのない一言を
+      const plain = { onsen: 'いいお湯だね。生き返るよ。', food: 'おいしい！ もう一つ食べたいな。' };
+      lines = ids.map(id => ({ id, text: game.profiles[id].personality === DEFAULT_PROFILES[id].personality ? SCENE_LINES[place][id] : plain[place] }));
+    }
+    const wrap = $('scene-lines');
+    if (!wrap) return;
+    wrap.replaceChildren();
+    lines.forEach((ln, i) => {
+      const row = document.createElement('div');
+      row.className = 'scene-line';
+      row.style.animationDelay = `${i * 0.5}s`;
+      const m = game.party.find(x => x.companion === ln.id);
+      const face = document.createElement('span');
+      face.className = 'scene-face';
+      face.innerHTML = ln.id === 'princess' ? Art.princessInline(28) : Art.heroInline(m.job, m.weapon, m.armor, 28);
+      const name = document.createElement('b');
+      name.textContent = who(ln.id).name;
+      const text = document.createElement('span');
+      text.textContent = ln.text;
+      row.append(face, name, text);
+      wrap.appendChild(row);
+    });
+    void box;
+  }
+
+  function parseScene(text, ids) {
+    if (!text) return null;
+    const byName = {};
+    ids.forEach(id => { byName[who(id).name] = id; byName[who(id).name.replace(/姫$/, '')] = id; });
+    const out = [];
+    for (const raw of String(text).split('\n')) {
+      const m = raw.replace(/[*#`]/g, '').match(/^\s*([^:：]{1,12})\s*[:：]\s*(.+)$/);
+      if (!m) continue;
+      const id = byName[m[1].trim()];
+      if (id) out.push({ id, text: m[2].trim().slice(0, 60) });
+      if (out.length >= 6) break;
+    }
+    return out.length >= 2 ? out : null;
+  }
+
   function bind() {
     $('chat-send').addEventListener('click', () => send($('chat-input').value));
     $('chat-input').addEventListener('keydown', e => {
@@ -259,7 +388,7 @@ ${p.name}:`;
     document.querySelectorAll('[data-chip]').forEach(b => b.addEventListener('click', () => send(b.dataset.chip)));
   }
 
-  return { init, bind, openTalkMenu, aiReady, close, PERSONAS };
+  return { init, bind, openTalkMenu, aiReady, close, scene, PERSONAS };
 })();
 
 Chat.bind();

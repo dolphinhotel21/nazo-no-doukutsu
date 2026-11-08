@@ -278,6 +278,27 @@ const Art = (() => {
     'dddeddde',
   ];
 
+  const ONSEN = [
+    '.s..s..s',
+    's..s..s.',
+    '.RRRRRR.',
+    'RRRRRRRR',
+    '.pwwwwp.',
+    '.pwwwwp.',
+    '.ppddpp.',
+    'cccccccc',
+  ];
+  const STALL = [
+    'rwrwrwrw',
+    'rwrwrwrw',
+    '.o....o.',
+    '.o.yy.o.',
+    'bbbbbbbb',
+    'bkkkkkkb',
+    'b......b',
+    '........',
+  ];
+
   const PLAYER = [
     '..hhhh..',
     '.hhhhhh.',
@@ -345,6 +366,8 @@ const Art = (() => {
       case 'f': return { layers: [url('spring-dry', SPRING, { g: '#6a6a7a', w: '#2a2a30', c: '#3a3a40' }), fl] };
       case 'x': return { layers: [url('trap', TRAP, { m: '#9a9aa8' }), fl] };
       case 'P': return { layers: [url('cell', CELL, { a: '#8a8a98', k: '#0a0a10', y: '#f0d040', s: '#f0c8a0', p: '#f070b0' }), fl] };
+      case 'S': return { layers: [url('onsen', ONSEN, { s: '#e8e8f0', R: '#7a4a9a', p: '#e8d8b0', w: '#fff8e0', d: '#6a4422', c: '#4a8ad8' }), fl], label: '湯' };
+      case 'G': return { layers: [url('stall', STALL, { r: '#d03030', w: '#f8f0e0', o: '#6a4422', y: '#ffb040', b: '#8a5a2a', k: '#5a3a1a' }), fl], label: '食' };
       case 'n': return { layers: [url('mountain', MOUNTAIN, { a: '#8a7a5a', b: '#5e4e38', w: '#f0f0f0' }), fl] };
       case 'q': return { layers: [url('forest', FOREST, { f: '#1e5a1e', j: '#2e7a2e', t: '#5a3a1a' }), url('grass-dark', GRASS, { g: '#2f6a24', h: '#285a1e', H: '#3a7a2e' })] };
       case 'O': return { layers: [url('townicon', TOWN_ICON, { r: '#c03a2a', b: '#2a5ab8', w: '#f0e0c0', d: '#5a3a1a' }), fl], label: '町' };
