@@ -125,10 +125,11 @@ const SPELLS = {
   poison:   { name: 'ポイズン',   type: 'debuff', target: 'enemy', mp: 3, desc: '敵1体を毒にする', jobs: ['thief', 'mage'], fx: 'poison' },
   smoke:    { name: 'スモーク',   type: 'escape', target: 'none',  mp: 2, desc: '必ず逃げる（ボス不可）', jobs: ['thief'], fx: 'run' },
   exit:     { name: 'エスケプ',   type: 'exit',   target: 'none',  mp: 6, desc: '洞窟から一瞬で外へ出る（移動中のみ）', jobs: ['mage', 'priest', 'thief'], fx: 'run' },
+  guide:    { name: 'ミチビキ',   type: 'guide',  target: 'none',  mp: 3, desc: '出口や階段までの最短の道を照らす（移動中のみ）', jobs: ['mage', 'priest', 'thief'], fx: 'holy' },
   warp:     { name: 'テレポ',     type: 'warp',   target: 'none',  mp: 10, desc: '町か、行ったことのある階へ飛ぶ（移動中のみ）', jobs: ['mage', 'priest'], fx: 'holy' },
 };
 const MAGIC_SHOP_LIST = [
-  { id: 'exit', price: 150 }, { id: 'warp', price: 400 },
+  { id: 'guide', price: 100 }, { id: 'exit', price: 150 }, { id: 'warp', price: 400 },
   { id: 'poison', price: 120 }, { id: 'smoke', price: 80 }, { id: 'holy', price: 250 },
   { id: 'blizzard', price: 250 }, { id: 'fullheal', price: 400 }, { id: 'revive', price: 500 },
   { id: 'thunder', price: 650 }, { id: 'healall', price: 700 },
@@ -170,11 +171,13 @@ const CONSUMABLES = {
   antidote:   { name: '毒消し草', effect: 'antidote', power: 0,   price: 12,  sell: 6,  desc: '毒を治す' },
   leaf:       { name: '復活の葉', effect: 'revive',   power: 0,   price: 180, sell: 90, desc: '倒れた仲間を復活' },
   holy_water: { name: '聖水',     effect: 'holy',     power: 0,   price: 60,  sell: 30, desc: '不死の敵に大ダメージ' },
+  lantern:    { name: '導きの灯', effect: 'guide',    power: 0,   price: 30,  sell: 15, desc: '出口や階段までの最短の道を照らす（移動中のみ）' },
   thread:     { name: '帰還の糸', effect: 'exit',     power: 0,   price: 35,  sell: 17, desc: '洞窟から外へ出る（移動中のみ）' },
   warpstone:  { name: '転移の石', effect: 'warp',     power: 0,   price: 160, sell: 80, desc: '町か、行ったことのある階へ飛ぶ（移動中のみ）' },
 };
-const ITEM_SHOP_LIST = ['herb', 'super_herb', 'mega_herb', 'ether', 'antidote', 'leaf', 'holy_water', 'thread', 'warpstone'];
-const FIELD_SPELL_TYPES = ['heal', 'revive', 'exit', 'warp'];
+const ITEM_SHOP_LIST = ['herb', 'super_herb', 'mega_herb', 'ether', 'antidote', 'leaf', 'holy_water', 'lantern', 'thread', 'warpstone'];
+const FIELD_SPELL_TYPES = ['heal', 'revive', 'exit', 'warp', 'guide'];
+const FIELD_ONLY = ['exit', 'warp', 'guide'];
 
 // 敵データ（type は戦闘グラフィックの種類）
 const ENEMIES = {
@@ -229,6 +232,7 @@ function newGameState() {
     flags: { golemDefeated: false, bossDefeated: false, hasTreasure: false, princessRescued: false, legendTaken: false, deepest: 0 },
     stats: { steps: 0, kills: 0 },
     trail: [],             // 隊列（直前の位置）
+    guide: null,           // 照らした道 { map, cells:Set, target, label }
     profiles: JSON.parse(JSON.stringify(DEFAULT_PROFILES)),
     messages: ['', '', ''],
     inputEnabled: true,
@@ -485,6 +489,7 @@ function renderMap() {
   container.style.gridTemplateColumns = `repeat(${vw}, var(--tile))`;
   const explored = game.explored[game.currentMap];
   const open = game.currentMap === 'town' || game.currentMap === 'field';
+  const guideCells = game.guide && game.guide.map === game.currentMap ? game.guide.cells : null;
   const followers = followerList();
   const followAt = {};
   game.trail.slice(0, followers.length).forEach((t, i) => { const k = `${t.x},${t.y}`; if (!followAt[k]) followAt[k] = followers[i]; });
@@ -523,6 +528,7 @@ function renderMap() {
         mk.textContent = '！';
         tile.appendChild(mk);
       }
+      if (guideCells && guideCells.has(key) && !isPlayer) tile.classList.add('guide');
       if (!inSight) tile.classList.add('fog-explored');
       frag.appendChild(tile);
     }
@@ -629,6 +635,10 @@ function tryMove(dx, dy) {
   game.trail.length = Math.min(game.trail.length, 4);
   p.x = nx; p.y = ny;
   game.stats.steps++;
+  if (game.guide) {
+    game.guide.cells.delete(`${nx},${ny}`);
+    if (cell === game.guide.target || !game.guide.cells.size) { game.guide = null; }
+  }
   markExplored();
   handleTileEvent(cell);
 }
@@ -771,6 +781,7 @@ function changeMap(target, how) {
     p.x = found ? found.x : m.startX; p.y = found ? found.y : m.startY;
   } else { p.x = m.startX; p.y = m.startY; }
   game.trail = [];
+  game.guide = null;
   const no = DUNGEONS.indexOf(target) + 1;
   if (no > (game.flags.deepest || 0)) game.flags.deepest = no;
   markExplored();
@@ -1321,7 +1332,7 @@ function openMagicSubMenu() {
     const b = document.createElement('button');
     b.className = 'battle-btn';
     b.textContent = `${sp.name} (MP${sp.mp}) ${sp.desc}`;
-    b.disabled = m.mp < sp.mp || (sp.target === 'dead' && !game.party.some(x => x.hp <= 0)) || ['exit', 'warp'].includes(sp.type);
+    b.disabled = m.mp < sp.mp || (sp.target === 'dead' && !game.party.some(x => x.hp <= 0)) || FIELD_ONLY.includes(sp.type);
     b.addEventListener('click', () => {
       if (!canAct()) return;
       if (sp.target === 'enemy') requestTarget({ type: 'spell', sid }, 'enemy');
@@ -1345,7 +1356,7 @@ function openItemSubMenu() {
     const b = document.createElement('button');
     b.className = 'battle-btn';
     b.textContent = `${c.name} ×${it.count}  ${c.desc}`;
-    b.disabled = (c.effect === 'revive' && !game.party.some(x => x.hp <= 0)) || ['exit', 'warp'].includes(c.effect);
+    b.disabled = (c.effect === 'revive' && !game.party.some(x => x.hp <= 0)) || FIELD_ONLY.includes(c.effect);
     b.addEventListener('click', () => {
       if (!canAct()) return;
       const kind = c.effect === 'holy' ? 'enemy' : c.effect === 'revive' ? 'dead' : 'ally';
@@ -2130,6 +2141,92 @@ function openItemShop() {
   }));
 }
 
+// ---------- 最短ルートを照らす ----------
+function findTile(ch) {
+  const g = game.maps[game.currentMap].grid;
+  for (let y = 0; y < g.length; y++) for (let x = 0; x < g.length; x++) if (g[y][x] === ch) return { x, y };
+  return null;
+}
+function knownCell(pos) {
+  return pos && game.explored[game.currentMap].has(`${pos.x},${pos.y}`);
+}
+
+// いまの場所で照らせる行き先
+function guideTargets() {
+  const map = game.currentMap;
+  const list = [];
+  if (map === 'town') list.push({ ch: TILE.TOWN_EXIT, label: '町の出口', ok: true });
+  if (map === 'field') {
+    list.push({ ch: TILE.TOWN_ICON, label: '町', ok: true });
+    list.push({ ch: TILE.CAVE_ICON, label: '洞窟', ok: true });
+  }
+  if (DUNGEONS.includes(map)) {
+    const no = DUNGEONS.indexOf(map) + 1;
+    list.push({ ch: TILE.STAIR_UP, label: no === 1 ? '出口（洞窟の外へ）' : '出口（上り階段）', ok: true });
+    // 前に来たことがある階（もっと深くまで行った）か、すでに見つけた場所なら照らせる
+    const been = (game.flags.deepest || 0) > no;
+    const add = (ch, label) => { const pos = findTile(ch); if (pos) list.push({ ch, label, ok: been || knownCell(pos), why: 'まだ見つけていない' }); };
+    add(TILE.STAIR_DOWN, '下り階段');
+    if (no === 5) {
+      if (!game.flags.bossDefeated) add(TILE.BOSS, '竜の間');
+      add(TILE.CELL, '姫の牢');
+      add(TILE.TREASURE, '秘宝');
+    }
+    if (no === 4 && !game.flags.legendTaken) {
+      const pos = findTile(TILE.LEGEND_CHEST);
+      if (pos) list.push({ ch: TILE.LEGEND_CHEST, label: '伝説の宝箱', ok: knownCell(pos), why: 'まだ見つけていない' });
+    }
+  }
+  return list;
+}
+
+// 一番近い目的のマスまでの最短経路（歩けるマスだけを通る）
+function shortestPath(ch) {
+  const g = game.maps[game.currentMap].grid, S = g.length, p = game.pos;
+  const prev = new Map();
+  const start = `${p.x},${p.y}`;
+  const q = [[p.x, p.y]];
+  prev.set(start, null);
+  while (q.length) {
+    const [x, y] = q.shift();
+    if (g[y][x] === ch && !(x === p.x && y === p.y)) {
+      const path = [];
+      let k = `${x},${y}`;
+      while (k && k !== start) { path.unshift(k); k = prev.get(k); }
+      return path;
+    }
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy, k = `${nx},${ny}`;
+      if (nx < 0 || ny < 0 || nx >= S || ny >= S || prev.has(k) || BLOCKING.has(g[ny][nx])) continue;
+      prev.set(k, `${x},${y}`);
+      q.push([nx, ny]);
+    }
+  }
+  return null;
+}
+
+function openGuideMenu(title, onGo) {
+  const targets = guideTargets();
+  if (!targets.length) { openDialog(title, 'ここでは照らせる道がない。'); return; }
+  let rows = '<div class="dialog-text">どこへの道を照らしますか？</div><div class="warp-list">';
+  rows += targets.map((t, i) => `<button class="shop-btn warp-btn" data-guide="${i}" ${t.ok ? '' : 'disabled'}>${t.label}${t.ok ? '' : `<small>（${t.why}）</small>`}</button>`).join('');
+  rows += '</div><div class="dim">一度行ったことのある階なら、下り階段への道も照らせる。</div>';
+  openShop(title, rows);
+  document.querySelectorAll('[data-guide]').forEach(b => b.addEventListener('click', () => {
+    const t = targets[parseInt(b.dataset.guide, 10)];
+    const path = shortestPath(t.ch);
+    if (!path || !path.length) { openDialog(title, '道が見つからなかった…。'); return; }
+    onGo();
+    game.guide = { map: game.currentMap, cells: new Set(path), target: t.ch, label: t.label };
+    path.forEach(k => game.explored[game.currentMap].add(k));
+    closeShop();
+    Sound.sfx('holy');
+    flashScreen('holy');
+    addMessage(`光の道が${t.label}まで続いている。（${path.length}歩）`, '#ffd700');
+    renderAll();
+  }));
+}
+
 // ---------- 洞窟からの脱出・ワープ ----------
 function inDungeon() { return DUNGEONS.includes(game.currentMap); }
 
@@ -2180,6 +2277,10 @@ function openFieldItems(selected) {
     doExit();
     return;
   }
+  if (selected && CONSUMABLES[selected].effect === 'guide') {
+    openGuideMenu('[ 導きの灯 ]', () => consumeItem(selected));
+    return;
+  }
   if (selected && CONSUMABLES[selected].effect === 'warp') {
     if (!warpDestinations().length) { openDialog('[ 転移の石 ]', '飛べる場所がない。'); return; }
     openWarpMenu('[ 転移の石 ]', () => consumeItem(selected));
@@ -2221,6 +2322,10 @@ function openFieldMagic(casterIdx, sid) {
       doExit();
       return;
     }
+    if (sp.type === 'guide') {
+      openGuideMenu(`[ ${m.name}の${sp.name} ]`, () => { m.mp -= sp.mp; });
+      return;
+    }
     if (sp.type === 'warp') {
       openWarpMenu(`[ ${m.name}の${sp.name} ]`, () => { m.mp -= sp.mp; });
       return;
@@ -2251,7 +2356,8 @@ function openFieldMagic(casterIdx, sid) {
   for (const s of m.spells.filter(s => FIELD_SPELL_TYPES.includes(SPELLS[s].type))) {
     const sp = SPELLS[s];
     const dis = m.mp < sp.mp || (sp.type === 'revive' && !game.party.some(t => t.hp <= 0))
-      || (sp.type === 'exit' && !inDungeon()) || (sp.type === 'warp' && !warpDestinations().length);
+      || (sp.type === 'exit' && !inDungeon()) || (sp.type === 'warp' && !warpDestinations().length)
+      || (sp.type === 'guide' && !guideTargets().some(t => t.ok));
     rows += `<div class="shop-item-row ${dis ? 'disabled' : ''}"><span class="shop-item-name">${sp.name}<small>MP${sp.mp} ${sp.desc}</small></span>
       <button class="shop-btn" data-cast="${s}" ${dis ? 'disabled' : ''}>唱える</button></div>`;
   }

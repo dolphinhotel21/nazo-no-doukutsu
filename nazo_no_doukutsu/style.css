@@ -659,3 +659,16 @@ button { font-family: inherit; }
 .scene-line b { color: #8cf; white-space: nowrap; font-weight: normal; }
 .scene-line b::after { content: '：'; }
 .scene-face svg { image-rendering: pixelated; display: block; }
+
+/* 照らした道 */
+.tile.guide::after {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  width: 34%; height: 34%; transform: translate(-50%, -50%);
+  border-radius: 50%; background: #ffe866;
+  box-shadow: 0 0 6px #ffd700, 0 0 12px rgba(255, 215, 0, 0.6);
+  animation: guidepulse 1.2s ease-in-out infinite;
+  pointer-events: none;
+}
+.tile.guide.fog-explored { filter: none; }
+@keyframes guidepulse { 50% { opacity: 0.45; transform: translate(-50%, -50%) scale(0.75); } }
+.warp-btn small { display: block; font-size: 10px; color: #888; }
