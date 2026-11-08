@@ -28,7 +28,13 @@ const Sound = (() => {
         master.gain.value = muted ? 0 : 0.5;
         master.connect(ctx.destination);
       }
-      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      if (ctx.state === 'suspended') {
+        // 再開できた時点でBGMを鳴らし直す（再開前に予約した音は鳴らないことがある）
+        ctx.resume().then(() => {
+          if (current && !muted) { stopLoop(); startLoop(current); }
+        }).catch(() => {});
+        return;
+      }
       if (current && !bgmGain) startLoop(current);
     } catch (e) { ctx = null; }
   }

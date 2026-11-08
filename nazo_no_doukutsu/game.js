@@ -1597,9 +1597,10 @@ function showStory(name) {
 // =============================
 function initEvents() {
   // 最初の操作で音を有効化
+  // スマホでは「指を離した時」でないと音を出す許可が下りないため、複数の操作で試みる
   const unlockOnce = () => Sound.unlock();
-  document.addEventListener('pointerdown', unlockOnce);
-  document.addEventListener('keydown', unlockOnce);
+  ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'].forEach(ev =>
+    document.addEventListener(ev, unlockOnce, { passive: true }));
 
   document.addEventListener('keydown', e => {
     if (cursor.context) {
