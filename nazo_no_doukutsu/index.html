@@ -20,7 +20,7 @@
 
   <!-- タイトル画面 -->
   <div id="screen-title" class="screen active">
-    <button class="btn-sound corner" type="button">♪ ON</button>
+    <div class="corner-btns"><button class="btn-fs" type="button">⛶ 全画面</button><button class="btn-sound" type="button">♪ ON</button></div>
     <div class="title-container">
       <img class="title-icon" src="icon.svg" alt="">
       <h1 class="game-title">謎の洞窟</h1>
@@ -29,7 +29,7 @@
         <button class="btn" id="btn-new-game">はじめから</button>
         <button class="btn" id="btn-load-title" disabled>つづきから</button>
       </div>
-      <p class="title-hint">画面に触れると音楽が流れます（右上の♪で切替）<br>PC：矢印キー / WASD で移動、Enterで決定<br>スマホ：画面下の十字キーで移動</p>
+      <p class="title-hint">画面に触れると音楽が流れます（右上の♪で切替）<br>PC：矢印キー / WASD で移動、Enterで決定<br>スマホ：行きたい方向の画面を押し続けると移動（十字キーも使えます）</p>
     </div>
   </div>
 
@@ -82,7 +82,7 @@
 
   <!-- メインゲーム画面 -->
   <div id="screen-game" class="screen">
-    <div id="title-bar"><span>謎の洞窟</span><button class="btn-sound" type="button">♪ ON</button></div>
+    <div id="title-bar"><span>謎の洞窟</span><span class="bar-btns"><button class="btn-fs" type="button">⛶ 全画面</button><button class="btn-sound" type="button">♪ ON</button></span></div>
     <div id="game-main">
       <div id="map-area"><div id="map-container"></div></div>
       <div id="status-panel">
@@ -181,6 +181,7 @@
       <div class="menu-title">メニュー</div>
       <button class="btn" id="btn-field-item">どうぐ</button>
       <button class="btn" id="btn-field-magic">まほう</button>
+      <button class="btn touch-only" id="btn-toggle-dpad">十字キー：表示中</button>
       <button class="btn" id="btn-save">セーブ</button>
       <button class="btn" id="btn-save-exit">セーブして終了</button>
       <button class="btn" id="btn-menu-close">とじる</button>

@@ -57,7 +57,12 @@ button { font-family: inherit; }
   padding: 2px 8px;
   cursor: pointer;
 }
-.btn-sound.corner { position: absolute; top: 10px; right: 10px; z-index: 2; }
+.btn-fs {
+  background: transparent; color: #6a8; border: 1px solid #2a4a2a;
+  font-size: 12px; padding: 2px 8px; cursor: pointer;
+}
+.corner-btns { position: absolute; top: 10px; right: 10px; z-index: 2; display: flex; gap: 6px; }
+.bar-btns { display: flex; gap: 6px; letter-spacing: 0; }
 
 /* =============================
    タイトル
@@ -140,6 +145,7 @@ button { font-family: inherit; }
   display: flex; align-items: center; justify-content: center;
   border-right: 1px solid #1a1a1a;
   position: relative;
+  touch-action: none;
 }
 #map-container { display: grid; gap: 0; }
 
@@ -383,7 +389,9 @@ button { font-family: inherit; }
   display: none; flex-direction: column; align-items: center; justify-content: center;
   padding: 6px 0 8px; background: #050505; border-top: 1px solid var(--line); gap: 3px; flex-shrink: 0;
 }
-@media (hover: none) and (pointer: coarse) { #dpad { display: flex; } }
+@media (hover: none) and (pointer: coarse) { #dpad { display: flex; } body.no-dpad #dpad { display: none; } }
+.touch-only { display: none; }
+@media (hover: none) and (pointer: coarse) { .touch-only { display: block; } }
 .dpad-row { display: flex; align-items: center; justify-content: center; gap: 3px; }
 .dpad-btn {
   width: 54px; height: 50px;

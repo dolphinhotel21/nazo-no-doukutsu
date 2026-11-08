@@ -25,6 +25,7 @@ const CONFIG = {
   MAX_LV: 30,
   SAVE_SLOT_KEY: 'nazo_no_doukutsu_v2_slot_',
   SOUND_KEY: 'nazo_no_doukutsu_muted',
+  DPAD_KEY: 'nazo_no_doukutsu_dpad',
   SAVE_SLOTS: 3,
 };
 
@@ -359,6 +360,7 @@ function initMaps() {
 // =============================
 let tilePx = 24;
 let viewW = CONFIG.VIEW_SIZE, viewH = CONFIG.VIEW_SIZE;
+let lastView = { x: 0, y: 0 };
 function fitMap() {
   const area = $('map-area');
   if (!area) return;
@@ -378,6 +380,7 @@ function renderMap() {
   const p = game.player;
   const viewX = clamp(p.x - Math.floor(viewW / 2), 0, S - viewW);
   const viewY = clamp(p.y - Math.floor(viewH / 2), 0, S - viewH);
+  lastView = { x: viewX, y: viewY };
   const container = $('map-container');
   container.style.gridTemplateColumns = `repeat(${viewW}, var(--tile))`;
   const explored = game.explored[game.currentMap];
@@ -727,7 +730,7 @@ function getCursorButtons() {
     case 'battle_main': return [...document.querySelectorAll('#battle-main-cmd .battle-btn')];
     case 'battle_sub': return [...document.querySelectorAll('#sub-cmd-list .battle-btn'), $('btn-sub-back')].filter(Boolean);
     case 'shop': return [...document.querySelectorAll('#shop-content .shop-btn'), $('btn-shop-close')].filter(Boolean);
-    case 'menu': return [...document.querySelectorAll('#menu-window .btn')];
+    case 'menu': return [...document.querySelectorAll('#menu-window .btn')].filter(b => b.offsetParent !== null);
     default: return [];
   }
 }
@@ -1525,6 +1528,7 @@ function openLoadSlotUI() {
   openSlotOverlay('[ ロード ]', html);
   document.querySelectorAll('[data-load-slot]').forEach(b => b.addEventListener('click', () => {
     if (loadFromSlot(parseInt(b.dataset.loadSlot, 10))) {
+      if (isTouchDevice()) enterFullscreen();
       closeSlotOverlay();
       startGameScreen();
       addMessage('冒険の続きを始めた。');
@@ -1649,6 +1653,7 @@ function initEvents() {
   });
 
   $('btn-story-go').addEventListener('click', () => {
+    if (isTouchDevice()) enterFullscreen();
     startGameScreen();
     addMessage(`${game.player.name}の冒険が始まった！ まずは城の王に会おう。`, '#00ff41');
   });
@@ -1702,6 +1707,108 @@ function initEvents() {
   window.addEventListener('blur', stop);
 
   window.addEventListener('resize', () => { if (game.screen === 'game') { fitMap(); renderMap(); } });
+
+  initTouchMove();
+  initFullscreen();
+  $('btn-toggle-dpad').addEventListener('click', () => {
+    store.setItem(CONFIG.DPAD_KEY, store.getItem(CONFIG.DPAD_KEY) === 'off' ? 'on' : 'off');
+    applyDpadSetting();
+  });
+  applyDpadSetting();
+}
+
+// =============================
+// 画面を押して移動（押している方向へ歩き続ける）
+// =============================
+const touchMove = { active: false, x: 0, y: 0, timer: null };
+
+function stepTowardTouch() {
+  if (!touchMove.active || !game.inputEnabled || game.screen !== 'game' || cursor.context) return;
+  const rect = $('map-container').getBoundingClientRect();
+  const p = game.player;
+  const tx = Math.floor((touchMove.x - rect.left) / tilePx) + lastView.x;
+  const ty = Math.floor((touchMove.y - rect.top) / tilePx) + lastView.y;
+  const dx = tx - p.x, dy = ty - p.y;
+  if (!dx && !dy) return;
+  const g = game.maps[game.currentMap].grid;
+  const blocked = (x, y) => !g[y] || g[y][x] === undefined || BLOCKING.has(g[y][x]);
+  const horiz = Math.abs(dx) >= Math.abs(dy);
+  const primary = horiz ? [Math.sign(dx), 0] : [0, Math.sign(dy)];
+  const secondary = horiz ? (dy ? [0, Math.sign(dy)] : null) : (dx ? [Math.sign(dx), 0] : null);
+  let d = primary;
+  // 正面が壁なら、もう一方の向きに回り込む
+  if (blocked(p.x + d[0], p.y + d[1]) && secondary && !blocked(p.x + secondary[0], p.y + secondary[1])) d = secondary;
+  tryMove(d[0], d[1]);
+}
+
+function initTouchMove() {
+  const area = $('map-area');
+  const stopT = () => { touchMove.active = false; clearInterval(touchMove.timer); touchMove.timer = null; };
+  area.addEventListener('pointerdown', e => {
+    if (game.screen !== 'game' || !game.inputEnabled) return;
+    e.preventDefault();
+    try { area.setPointerCapture(e.pointerId); } catch (err) {}
+    touchMove.active = true;
+    touchMove.x = e.clientX; touchMove.y = e.clientY;
+    stepTowardTouch();
+    clearInterval(touchMove.timer);
+    touchMove.timer = setInterval(stepTowardTouch, 170);
+  });
+  area.addEventListener('pointermove', e => {
+    if (!touchMove.active) return;
+    touchMove.x = e.clientX; touchMove.y = e.clientY;
+  });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => area.addEventListener(ev, stopT));
+  window.addEventListener('blur', stopT);
+}
+
+// =============================
+// 全画面表示
+// =============================
+function fsSupported() {
+  return !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+}
+function isFullscreen() {
+  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+function enterFullscreen() {
+  if (!fsSupported() || isFullscreen()) return;
+  const el = document.documentElement;
+  try {
+    const r = (el.requestFullscreen || el.webkitRequestFullscreen).call(el, { navigationUI: 'hide' });
+    if (r && r.catch) r.catch(() => {});
+  } catch (e) {}
+}
+function toggleFullscreen() {
+  if (isFullscreen()) {
+    try {
+      const r = (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      if (r && r.catch) r.catch(() => {});
+    } catch (e) {}
+  } else enterFullscreen();
+}
+function isTouchDevice() {
+  return window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+}
+function initFullscreen() {
+  const btns = document.querySelectorAll('.btn-fs');
+  if (!fsSupported()) { btns.forEach(b => { b.style.display = 'none'; }); return; }
+  const label = () => btns.forEach(b => { b.textContent = isFullscreen() ? '⛶ 戻す' : '⛶ 全画面'; });
+  btns.forEach(b => b.addEventListener('click', e => { e.stopPropagation(); toggleFullscreen(); }));
+  ['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
+    label();
+    setTimeout(() => { if (game.screen === 'game') { fitMap(); renderMap(); } }, 120);
+  }));
+  label();
+}
+
+// 十字キーの表示切替
+function applyDpadSetting() {
+  const hide = store.getItem(CONFIG.DPAD_KEY) === 'off';
+  document.body.classList.toggle('no-dpad', hide);
+  const b = $('btn-toggle-dpad');
+  if (b) b.textContent = hide ? '十字キー：非表示' : '十字キー：表示中';
+  if (game.screen === 'game') setTimeout(() => { fitMap(); renderMap(); }, 50);
 }
 
 function toggleMenu() {
