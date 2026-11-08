@@ -1,6 +1,6 @@
 // 更新がすぐ届くよう「ネットワーク優先・失敗したらキャッシュ」で配信する
-const CACHE_NAME = 'nazo-no-doukutsu-v2';
-const ASSETS = ['./', './index.html', './style.css', './art.js', './audio.js', './game.js', './manifest.json', './icon.svg'];
+const CACHE_NAME = 'nazo-no-doukutsu-v3';
+const ASSETS = ['./', './index.html', './style.css', './art.js', './audio.js', './game.js', './chat.js', './csp.js', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)).catch(() => {}));

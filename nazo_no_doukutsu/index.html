@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#000000">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <script src="csp.js"></script>
   <meta name="referrer" content="no-referrer">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -159,6 +159,7 @@
   <div id="menu-overlay" class="hidden">
     <div id="menu-window">
       <div class="menu-title">メニュー</div>
+      <button class="btn" id="btn-field-talk">はなす</button>
       <button class="btn" id="btn-field-party">なかま</button>
       <button class="btn" id="btn-field-item">どうぐ</button>
       <button class="btn" id="btn-field-magic">まほう</button>
@@ -166,6 +167,29 @@
       <button class="btn" id="btn-save">セーブ</button>
       <button class="btn" id="btn-save-exit">セーブして終了</button>
       <button class="btn" id="btn-menu-close">とじる</button>
+    </div>
+  </div>
+
+  <!-- 仲間との会話 -->
+  <div id="chat-overlay" class="hidden">
+    <div id="chat-window">
+      <div id="chat-head">
+        <div id="chat-face"></div>
+        <div id="chat-name"></div>
+        <span id="chat-mode">会話</span>
+        <button id="chat-close" type="button">とじる</button>
+      </div>
+      <div id="chat-log"></div>
+      <div id="chat-chips">
+        <button class="chip" data-chip="調子はどう？">調子はどう？</button>
+        <button class="chip" data-chip="次はどうしたらいい？">次はどうする？</button>
+        <button class="chip" data-chip="竜について何か知ってる？">竜のこと</button>
+        <button class="chip" data-chip="ありがとう、頼りにしてるよ">ありがとう</button>
+      </div>
+      <div id="chat-form">
+        <input id="chat-input" type="text" maxlength="120" placeholder="話しかける…" autocomplete="off">
+        <button id="chat-send" type="button">送る</button>
+      </div>
     </div>
   </div>
 
@@ -206,5 +230,6 @@
   <script src="art.js"></script>
   <script src="audio.js"></script>
   <script src="game.js"></script>
+  <script src="chat.js"></script>
 </body>
 </html>

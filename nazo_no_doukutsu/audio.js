@@ -196,6 +196,20 @@ const Sound = (() => {
              ['B5',1],['A5',1],['G5',1],['F5',1],['E5',1],['D5',1],['C5',6],['R',2]],
       bass: [['C3',3],['G2',3],['F2',3],['A2',3],['G2',3],['G2',3],['C3',4],['C2',4]],
     },
+    abyss: {
+      bpm: 66, leadType: 'triangle', bassType: 'sawtooth',
+      lead: [['E5',2],['F5',2],['E5',1],['D#5',1],['E5',2],['B4',4],['C5',2],['B4',2],
+             ['A4',2],['G#4',2],['A4',1],['B4',1],['C5',2],['B4',6],['R',2]],
+      bass: [['E2',4],['F2',4],['E2',4],['B1',4],['A1',4],['F1',4],['E1',8]],
+    },
+    // 階が深くなるほど、同じ曲を低く・重く・速くした変奏にする
+    dungeon2: { base: 'dungeon', transpose: -3, bpm: 78, leadType: 'triangle', bassType: 'square' },
+    deep4:    { base: 'deep', transpose: -2, bpm: 70, leadType: 'sawtooth', bassType: 'sawtooth' },
+    battle2:  { base: 'battle', transpose: -3, bpm: 166, leadType: 'square', bassType: 'square' },
+    battle3:  { base: 'battle', transpose: -5, bpm: 172, leadType: 'sawtooth', bassType: 'square' },
+    battle4:  { base: 'battle', transpose: -6, bpm: 178, leadType: 'sawtooth', bassType: 'sawtooth' },
+    battle5:  { base: 'boss', transpose: -5, bpm: 150, leadType: 'square', bassType: 'sawtooth' },
+    midboss:  { base: 'boss', transpose: -2, bpm: 136, leadType: 'square', bassType: 'square' },
     gameover: {
       bpm: 70, leadType: 'triangle', bassType: 'triangle', once: true,
       lead: [['E5',2],['D5',1],['C5',1],['B4',2],['A4',4],['R',4]],
@@ -203,17 +217,24 @@ const Sound = (() => {
     },
   };
 
-  function scheduleTrack(name, t0) {
+  function resolve(name) {
     const tr = TRACKS[name];
+    if (!tr.base) return { ...tr, shift: 1 };
+    const b = TRACKS[tr.base];
+    return { ...b, ...tr, lead: b.lead, bass: b.bass, shift: Math.pow(2, (tr.transpose || 0) / 12) };
+  }
+
+  function scheduleTrack(name, t0) {
+    const tr = resolve(name);
     const beat = 60 / tr.bpm;
     let t = t0;
     for (const [n, b] of tr.lead) {
-      if (n !== 'R') tone(bgmGain, freq(n), t, b * beat * 0.92, tr.leadType, 0.11);
+      if (n !== 'R') tone(bgmGain, freq(n) * tr.shift, t, b * beat * 0.92, tr.leadType, tr.leadType === 'sawtooth' ? 0.07 : 0.11);
       t += b * beat;
     }
     let tb = t0;
     for (const [n, b] of tr.bass) {
-      if (n !== 'R') tone(bgmGain, freq(n), tb, b * beat * 0.85, tr.bassType, tr.bassType === 'triangle' ? 0.16 : 0.05);
+      if (n !== 'R') tone(bgmGain, freq(n) * tr.shift, tb, b * beat * 0.85, tr.bassType, tr.bassType === 'triangle' ? 0.16 : 0.05);
       tb += b * beat;
     }
     return Math.max(t, tb) - t0;

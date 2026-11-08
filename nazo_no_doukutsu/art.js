@@ -738,6 +738,16 @@ const Art = (() => {
     return `<svg xmlns="http://www.w3.org/2000/svg"${size} viewBox="0 0 ${rows[0].length} ${rows.length}" shape-rendering="crispEdges">${rects}</svg>`;
   }
 
+  // マップ用：装備を反映した16×16の姿（背景画像として使う）
+  function heroURL(job, weapon, armor) {
+    const key = `hero-${job}-${weapon}-${armor}`;
+    if (!cache[key]) {
+      const { rows, pal } = heroGrid(job, weapon, armor);
+      cache[key] = `url("data:image/svg+xml,${encodeURIComponent(gridSVG(rows, pal))}")`;
+    }
+    return cache[key];
+  }
+
   function heroInline(job, weapon, armor, px) {
     const { rows, pal } = heroGrid(job, weapon, armor);
     return gridSVG(rows, pal, px);
@@ -745,6 +755,6 @@ const Art = (() => {
 
   return {
     cellLayers, floorTile, playerSprite, princessSprite,
-    playerInline, princessInline, enemySVG, heroInline,
+    playerInline, princessInline, enemySVG, heroInline, heroURL,
   };
 })();

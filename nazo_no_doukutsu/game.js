@@ -46,12 +46,12 @@ const TILE = {
 const BLOCKING = new Set([TILE.WALL, TILE.TREE, TILE.WATER, TILE.MOUNTAIN]);
 
 const AREAS = {
-  field:    { name: 'フィールド', no: 0, enc: 0.06, pool: 'field', bgm: 'field', open: true },
-  dungeon1: { name: 'B1F', no: 1, enc: 0.10, pool: 'b1', bgm: 'dungeon' },
-  dungeon2: { name: 'B2F', no: 2, enc: 0.12, pool: 'b2', bgm: 'dungeon' },
-  dungeon3: { name: 'B3F', no: 3, enc: 0.13, pool: 'b3', bgm: 'dungeon' },
-  dungeon4: { name: 'B4F', no: 4, enc: 0.14, pool: 'b4', bgm: 'deep' },
-  dungeon5: { name: 'B5F', no: 5, enc: 0.15, pool: 'b5', bgm: 'deep' },
+  field:    { name: 'フィールド', no: 0, enc: 0.06, pool: 'field', bgm: 'field', battleBgm: 'battle', open: true },
+  dungeon1: { name: 'B1F', no: 1, enc: 0.10, pool: 'b1', bgm: 'dungeon', battleBgm: 'battle' },
+  dungeon2: { name: 'B2F', no: 2, enc: 0.12, pool: 'b2', bgm: 'dungeon2', battleBgm: 'battle2' },
+  dungeon3: { name: 'B3F', no: 3, enc: 0.13, pool: 'b3', bgm: 'deep', battleBgm: 'battle3' },
+  dungeon4: { name: 'B4F', no: 4, enc: 0.14, pool: 'b4', bgm: 'deep4', battleBgm: 'battle4' },
+  dungeon5: { name: 'B5F', no: 5, enc: 0.15, pool: 'b5', bgm: 'abyss', battleBgm: 'battle5' },
 };
 const DUNGEONS = ['dungeon1', 'dungeon2', 'dungeon3', 'dungeon4', 'dungeon5'];
 const MAP_NAMES = { town: '町', field: 'フィールド', dungeon1: 'B1F', dungeon2: 'B2F', dungeon3: 'B3F', dungeon4: 'B4F', dungeon5: 'B5F' };
@@ -428,7 +428,7 @@ function fitMap() {
 }
 
 function followerList() {
-  const list = game.party.slice(1).map(m => ({ sprite: Art.playerSprite(m.job), dead: m.hp <= 0 }));
+  const list = game.party.slice(1).map(m => ({ sprite: Art.heroURL(m.job, m.weapon, m.armor), dead: m.hp <= 0 }));
   if (game.flags.princessRescued) list.push({ sprite: Art.princessSprite() });
   return list;
 }
@@ -467,9 +467,9 @@ function renderMap() {
       const look = Art.cellLayers(game.currentMap, grid[my][mx]);
       const layers = [...look.layers];
       const npc = townNpcAt(mx, my);
-      if (npc) layers.unshift(Art.playerSprite(COMPANIONS[npc].job));
+      if (npc) { const j = COMPANIONS[npc].job; layers.unshift(Art.heroURL(j, JOBS[j].weapon, 'cloth')); }
       if (!isPlayer && followAt[key]) layers.unshift(followAt[key].sprite);
-      if (isPlayer) layers.unshift(Art.playerSprite(hero().job));
+      if (isPlayer) { const h = hero(); layers.unshift(Art.heroURL(h.job, h.weapon, h.armor)); }
       tile.style.backgroundImage = layers.join(',');
       if (!isPlayer && followAt[key] && followAt[key].dead) tile.classList.add('ghost');
       if (look.label && !isPlayer) {
@@ -507,6 +507,7 @@ function buildStatusPanel() {
         <div class="pm-name"><span id="pm-name-${i}"></span><span class="pm-lv" id="pm-lv-${i}"></span></div>
         <div class="bar-row"><span class="bar-label">HP</span>${barHTML('sp-hp-' + i)}<span class="bar-num" id="sp-hp-${i}-num"></span></div>
         <div class="bar-row"><span class="bar-label">MP</span>${barHTML('sp-mp-' + i, 'mp')}<span class="bar-num" id="sp-mp-${i}-num"></span></div>
+        <div class="pm-equip" id="pm-equip-${i}"></div>
       </div>
     </div>`).join('');
   box.dataset.size = game.party.length;
@@ -522,7 +523,11 @@ function updateStatusPanel() {
     setBar('sp-mp-' + i, m.mp, getMaxMp(m));
     const face = $('pm-face-' + i);
     const look = `${m.job}|${m.weapon}|${m.armor}`;
-    if (face.dataset.look !== look) { face.dataset.look = look; face.innerHTML = Art.heroInline(m.job, m.weapon, m.armor, 40); }
+    if (face.dataset.look !== look) {
+      face.dataset.look = look;
+      face.innerHTML = Art.heroInline(m.job, m.weapon, m.armor, 40);
+      $('pm-equip-' + i).innerHTML = `<span class="eq-w"><b>武</b>${WEAPONS[m.weapon].name}</span><span class="eq-a"><b>防</b>${ARMORS[m.armor].name}</span>`;
+    }
     $('pm-card-' + i).classList.toggle('dead', m.hp <= 0);
   });
   $('st-gold').textContent = `${game.gold} ペリカ`;
@@ -996,7 +1001,7 @@ function startBattle(kind) {
     : enemies.length > 1 ? `魔物の群れが あらわれた！` : `${enemies[0].name}が あらわれた！`;
   buildBattleStage();
   $('battle-log').replaceChildren();
-  Sound.bgm(battleState.boss ? 'boss' : 'battle');
+  Sound.bgm(kind === 'boss' ? 'boss' : kind === 'golem' ? 'midboss' : (AREAS[game.currentMap].battleBgm || 'battle'));
   if (kind === 'boss') addBattleLog('「愚かな人間どもめ…。姫は渡さぬ！」', '#ff6666');
   if (kind === 'golem') addBattleLog('「ココ ヨリ サキ ニハ トオサヌ」', '#ff9966');
   updateTargetToggle();
@@ -2509,6 +2514,7 @@ function initEvents() {
   $('btn-menu').addEventListener('click', toggleMenu);
   $('btn-menu-close').addEventListener('click', toggleMenu);
   $('btn-field-party').addEventListener('click', () => { toggleMenu(); openPartyMenu(); });
+  $('btn-field-talk').addEventListener('click', () => { toggleMenu(); Chat.openTalkMenu(); });
   $('btn-field-item').addEventListener('click', () => { toggleMenu(); openFieldItems(); });
   $('btn-field-magic').addEventListener('click', () => { toggleMenu(); openFieldMagic(); });
   $('btn-save').addEventListener('click', () => { toggleMenu(); openSaveSlotUI(false); });
