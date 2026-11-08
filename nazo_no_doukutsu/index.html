@@ -30,7 +30,7 @@
       <div class="title-buttons">
         <button class="btn" id="btn-new-game">はじめから</button>
         <button class="btn" id="btn-load-title" disabled>つづきから</button>
-        <button class="btn btn-small" id="btn-ai-title">AI設定</button>
+        <button class="btn" id="btn-ai-title">AI設定</button>
       </div>
       <p class="title-hint">画面に触れると音楽が流れます（右上の♪で切替）<br>PC：矢印キー / WASD で移動、Enterで決定<br>スマホ：行きたい方向の画面を押し続けると移動（十字キーも使えます）</p>
     </div>
@@ -43,6 +43,13 @@
       <div class="create-row">
         <label for="input-name">名前</label>
         <input type="text" id="input-name" maxlength="8" placeholder="名前を入力" autocomplete="off">
+      </div>
+      <div class="create-row">
+        <label>性別</label>
+        <div class="gender-pick">
+          <button class="pick-btn on" data-gender="男性" type="button">男性</button>
+          <button class="pick-btn" data-gender="女性" type="button">女性</button>
+        </div>
       </div>
       <h3 class="section-title">職業を選ぶ</h3>
       <div class="job-grid">

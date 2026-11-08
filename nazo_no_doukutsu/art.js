@@ -717,16 +717,32 @@ const Art = (() => {
     holy_staff:    { pal: { g: '#c8a040', y: '#ffd800', Y: '#fff8c0' }, px: [...staffPx(3), [12, 0, 'Y'], [12, 1, 'y'], [11, 1, 'y'], [13, 1, 'y'], [12, 2, 'y']] },
   };
 
-  function heroGrid(job, weapon, armor) {
+  // 女性の姿：髪型・顔・服の色の差分
+  const FEMALE = {
+    warrior: { hair: '#e8b040', head: { h: '#e8b040', H: '#ffe080', r: '#e0306a' }, headPx: [[7, 0, 'r'], [8, 0, 'r'], [6, 1, 'H']], T: '#e05a7a', t: '#8a1a3a' },
+    mage:    { hair: '#a060e0', head: { h: '#4a2a9a', H: '#ffd800' }, headPx: [[8, 0, 'h'], [7, 0, 'h'], [4, 2, 'h'], [11, 2, 'h'], [8, 1, 'H']], T: '#8a4ad8', t: '#3a1a7a' },
+    priest:  { hair: '#f0d070', head: { h: '#f4f4f4', H: '#ffd800' }, headPx: [[7, 1, 'H']], T: '#f4eef8', t: '#d8a0d0' },
+    thief:   { hair: '#8a4a2a', head: { h: '#3aa87a', H: '#8a4a2a' }, headPx: [[4, 2, 'h'], [3, 2, 'h']], T: '#3aa87a', t: '#1a5a4a' },
+  };
+
+  function heroGrid(job, weapon, armor, female) {
     const g = HERO_BASE.map(r => r.split(''));
     const pal = { s: '#e8a878', e: '#101010', b: '#3a2a1a' };
     const put = (x, y, c) => { if (g[y] && x >= 0 && x < 16) g[y][x] = c; };
+    const fm = female ? (FEMALE[job] || FEMALE.warrior) : null;
 
-    const head = HEADS[job] || HEADS.warrior;
+    const head = fm ? { pal: fm.head, px: fm.headPx } : (HEADS[job] || HEADS.warrior);
     Object.assign(pal, head.pal);
     head.px.forEach(([x, y, c]) => put(x, y, c));
+    if (fm) {
+      // 長い髪（両脇に垂らす）と、ほおの赤み
+      pal.k = fm.hair; pal.q = '#f49ab0';
+      [[4, 3], [4, 4], [4, 5], [4, 6], [5, 5], [11, 3], [11, 4], [10, 5]].forEach(([x, y]) => put(x, y, 'k'));
+      if (job === 'thief') { put(3, 5, 'k'); put(3, 6, 'k'); put(12, 4, 'k'); put(12, 5, 'k'); }
+      put(9, 4, 'q');
+    }
 
-    const body = JOB_BODY[job] || JOB_BODY.warrior;
+    const body = fm ? { T: fm.T, t: fm.t } : (JOB_BODY[job] || JOB_BODY.warrior);
     const a = ARMOR_LOOK[armor] || ARMOR_LOOK.cloth;
     pal.T = a.T || body.T;
     pal.t = a.t || body.t;
@@ -737,8 +753,18 @@ const Art = (() => {
       put(4, 13, 'T'); put(11, 13, 'T');
       for (let y = 6; y <= 13; y++) put(7, y, 't');
     }
-    if (a.mask) { put(6, 5, 't'); put(7, 5, 't'); put(8, 5, 't'); put(9, 5, 't'); }
+    if (a.mask && !fm) { put(6, 5, 't'); put(7, 5, 't'); put(8, 5, 't'); put(9, 5, 't'); }
     if (a.shine) { pal.Z = '#ffffff'; put(6, 7, 'Z'); }
+    if (fm) {
+      // ふんわりしたスカートと胸元のリボン、すそのフリル
+      pal.F = '#ffffff'; pal.R = '#ff5a9a';
+      for (let x = 5; x <= 10; x++) put(x, 10, 't');
+      for (let x = 4; x <= 11; x++) { put(x, 11, 'T'); put(x, 12, 'T'); }
+      for (let x = 3; x <= 12; x++) put(x, 13, x % 2 ? 'F' : 'T');
+      for (let x = 0; x < 16; x++) { if (g[14][x] !== '.') g[14][x] = '.'; if (g[15][x] !== '.') g[15][x] = '.'; }
+      put(6, 14, 's'); put(9, 14, 's'); put(6, 15, 'b'); put(9, 15, 'b'); put(5, 15, 'b'); put(10, 15, 'b');
+      put(7, 6, 'R'); put(8, 6, 'R'); put(7, 7, 'R');
+    }
 
     const w = WEAPON_LOOK[weapon];
     if (w) {
@@ -762,17 +788,17 @@ const Art = (() => {
   }
 
   // マップ用：装備を反映した16×16の姿（背景画像として使う）
-  function heroURL(job, weapon, armor) {
-    const key = `hero-${job}-${weapon}-${armor}`;
+  function heroURL(job, weapon, armor, female) {
+    const key = `hero-${job}-${weapon}-${armor}-${female ? 'f' : 'm'}`;
     if (!cache[key]) {
-      const { rows, pal } = heroGrid(job, weapon, armor);
+      const { rows, pal } = heroGrid(job, weapon, armor, female);
       cache[key] = `url("data:image/svg+xml,${encodeURIComponent(gridSVG(rows, pal))}")`;
     }
     return cache[key];
   }
 
-  function heroInline(job, weapon, armor, px) {
-    const { rows, pal } = heroGrid(job, weapon, armor);
+  function heroInline(job, weapon, armor, px, female) {
+    const { rows, pal } = heroGrid(job, weapon, armor, female);
     return gridSVG(rows, pal, px);
   }
 

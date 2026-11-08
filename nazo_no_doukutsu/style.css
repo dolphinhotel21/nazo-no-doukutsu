@@ -677,3 +677,6 @@ button { font-family: inherit; }
 .profile-form .check input { margin-top: 3px; }
 .profile-form .warn { font-size: 11px; color: #c9a86a; line-height: 1.6; border: 1px solid #4a3a1a; padding: 6px; }
 .ok-mark { color: #6f6; font-size: 11px; margin-left: 6px; }
+
+.gender-pick { display: flex; gap: 6px; }
+.gender-pick .pick-btn { padding: 6px 16px; font-size: 14px; }

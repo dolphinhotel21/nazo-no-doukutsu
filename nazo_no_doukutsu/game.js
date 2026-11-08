@@ -239,6 +239,12 @@ function newGameState() {
   };
 }
 const hero = () => game.party[0];
+// 設定の性別が女性なら、女性らしい姿で描く
+function isFemale(m) {
+  if (!m || !game.profiles) return false;
+  const key = m.companion || (m === game.party[0] ? 'hero' : null);
+  return !!key && !!game.profiles[key] && game.profiles[key].gender === '女性';
+}
 const alive = () => game.party.filter(m => m.hp > 0);
 
 // =============================
@@ -471,7 +477,7 @@ function fitMap() {
 }
 
 function followerList() {
-  const list = game.party.slice(1).map(m => ({ sprite: Art.heroURL(m.job, m.weapon, m.armor), dead: m.hp <= 0 }));
+  const list = game.party.slice(1).map(m => ({ sprite: Art.heroURL(m.job, m.weapon, m.armor, isFemale(m)), dead: m.hp <= 0 }));
   if (game.flags.princessRescued) list.push({ sprite: Art.princessSprite() });
   return list;
 }
@@ -511,9 +517,9 @@ function renderMap() {
       const look = Art.cellLayers(game.currentMap, grid[my][mx]);
       const layers = [...look.layers];
       const npc = townNpcAt(mx, my);
-      if (npc) { const j = COMPANIONS[npc].job; layers.unshift(Art.heroURL(j, JOBS[j].weapon, 'cloth')); }
+      if (npc) { const j = COMPANIONS[npc].job; layers.unshift(Art.heroURL(j, JOBS[j].weapon, 'cloth', game.profiles[npc].gender === '女性')); }
       if (!isPlayer && followAt[key]) layers.unshift(followAt[key].sprite);
-      if (isPlayer) { const h = hero(); layers.unshift(Art.heroURL(h.job, h.weapon, h.armor)); }
+      if (isPlayer) { const h = hero(); layers.unshift(Art.heroURL(h.job, h.weapon, h.armor, isFemale(h))); }
       tile.style.backgroundImage = layers.join(',');
       if (!isPlayer && followAt[key] && followAt[key].dead) tile.classList.add('ghost');
       if (look.label && !isPlayer) {
@@ -567,10 +573,10 @@ function updateStatusPanel() {
     setBar('sp-hp-' + i, m.hp, m.maxHp);
     setBar('sp-mp-' + i, m.mp, getMaxMp(m));
     const face = $('pm-face-' + i);
-    const look = `${m.job}|${m.weapon}|${m.armor}`;
+    const look = `${m.job}|${m.weapon}|${m.armor}|${isFemale(m)}`;
     if (face.dataset.look !== look) {
       face.dataset.look = look;
-      face.innerHTML = Art.heroInline(m.job, m.weapon, m.armor, 40);
+      face.innerHTML = Art.heroInline(m.job, m.weapon, m.armor, 40, isFemale(m));
       $('pm-equip-' + i).innerHTML = `<span class="eq-w"><b>武</b>${WEAPONS[m.weapon].name}</span><span class="eq-a"><b>防</b>${ARMORS[m.armor].name}</span>`;
     }
     $('pm-card-' + i).classList.toggle('dead', m.hp <= 0);
@@ -1070,7 +1076,7 @@ function buildBattleStage() {
   const bs = battleState;
   $('bf-party').innerHTML = game.party.map((m, i) => `
     <div class="bf-row" id="bf-pmrow-${i}" data-idx="${i}">
-      <div class="bf-sprite" id="bf-pm-${i}">${Art.heroInline(m.job, m.weapon, m.armor, 52)}</div>
+      <div class="bf-sprite" id="bf-pm-${i}">${Art.heroInline(m.job, m.weapon, m.armor, 52, isFemale(m))}</div>
       <div class="bf-info">
         <div class="bf-name">${esc(m.name)}<span class="bf-tag" id="bf-pmtag-${i}"></span></div>
         <div class="bar-row"><span class="bar-label">HP</span>${barHTML('bh-hp-' + i)}</div>
@@ -1837,7 +1843,7 @@ let shopWho = 0;
 function memberPicker(onPick) {
   if (shopWho >= game.party.length) shopWho = 0;
   const html = `<div class="member-picker">${game.party.map((m, i) =>
-    `<button class="pick-btn ${i === shopWho ? 'on' : ''}" data-pick="${i}">${Art.heroInline(m.job, m.weapon, m.armor, 28)}<span>${esc(m.name)}</span></button>`).join('')}</div>`;
+    `<button class="pick-btn ${i === shopWho ? 'on' : ''}" data-pick="${i}">${Art.heroInline(m.job, m.weapon, m.armor, 28, isFemale(m))}<span>${esc(m.name)}</span></button>`).join('')}</div>`;
   return { html, bind: () => document.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => { shopWho = parseInt(b.dataset.pick, 10); Sound.sfx('select'); onPick(); })) };
 }
 
@@ -1890,7 +1896,7 @@ function openPartyMenu() {
   let rows = '';
   game.party.forEach((m, i) => {
     rows += `<div class="party-detail ${m.hp <= 0 ? 'dead' : ''}">
-      <div class="pd-face">${Art.heroInline(m.job, m.weapon, m.armor, 48)}</div>
+      <div class="pd-face">${Art.heroInline(m.job, m.weapon, m.armor, 48, isFemale(m))}</div>
       <div class="pd-info">
         <div><b>${esc(m.name)}</b>　${JOBS[m.job].name} LV${m.lv}${m.hp <= 0 ? '　<span style="color:#f66">倒れている</span>' : ''}</div>
         <div class="dim2">HP ${m.hp}/${m.maxHp}　MP ${m.mp}/${getMaxMp(m)}　攻${getAtk(m)}　防${getDef(m)}</div>
@@ -1924,7 +1930,7 @@ function openProfileEditor(id) {
   const member = isHero ? hero() : game.party.find(m => m.companion === id);
   const fixedName = isHero || id === 'princess';
   const name = isHero ? hero().name : pr.name;
-  const face = id === 'princess' ? Art.princessInline(40) : Art.heroInline(member.job, member.weapon, member.armor, 40);
+  const face = id === 'princess' ? Art.princessInline(40) : Art.heroInline(member.job, member.weapon, member.armor, 40, isFemale(member));
   openShop(`[ ${name}の設定 ]`, `
     <div class="profile-form">
       <div class="pf-head">${face}<div class="dim2">${isHero ? 'あなた（主人公）の設定です。仲間はこれを知った上で話します。' : 'ここに書いた内容を見て、AIがこの人物として話します。'}</div></div>
@@ -2266,7 +2272,7 @@ function openWarpMenu(title, onGo) {
 // ---------- フィールドで道具・魔法を使う ----------
 function targetButtons(attr, filter) {
   return `<div class="member-picker">${game.party.map((m, i) => filter(m)
-    ? `<button class="pick-btn" ${attr}="${i}">${Art.heroInline(m.job, m.weapon, m.armor, 28)}<span>${esc(m.name)}<small>${m.hp}/${m.maxHp}</small></span></button>` : '').join('')}</div>`;
+    ? `<button class="pick-btn" ${attr}="${i}">${Art.heroInline(m.job, m.weapon, m.armor, 28, isFemale(m))}<span>${esc(m.name)}<small>${m.hp}/${m.maxHp}</small></span></button>` : '').join('')}</div>`;
 }
 
 function openFieldItems(selected) {
@@ -2351,7 +2357,7 @@ function openFieldMagic(casterIdx, sid) {
   }
   let rows = `<div class="member-picker">${casters.map(i => {
     const c = game.party[i];
-    return `<button class="pick-btn ${i === casterIdx ? 'on' : ''}" data-caster="${i}">${Art.heroInline(c.job, c.weapon, c.armor, 28)}<span>${esc(c.name)}<small>MP${c.mp}</small></span></button>`;
+    return `<button class="pick-btn ${i === casterIdx ? 'on' : ''}" data-caster="${i}">${Art.heroInline(c.job, c.weapon, c.armor, 28, isFemale(c))}<span>${esc(c.name)}<small>MP${c.mp}</small></span></button>`;
   }).join('')}</div>`;
   for (const s of m.spells.filter(s => FIELD_SPELL_TYPES.includes(SPELLS[s].type))) {
     const sp = SPELLS[s];
@@ -2573,7 +2579,7 @@ function triggerEnding() {
   const h = hero();
   showScreen('ending');
   Sound.bgm('ending');
-  $('ending-art').innerHTML = game.party.map(m => Art.heroInline(m.job, m.weapon, m.armor, 64)).join('') + Art.princessInline(64);
+  $('ending-art').innerHTML = game.party.map(m => Art.heroInline(m.job, m.weapon, m.armor, 64, isFemale(m))).join('') + Art.princessInline(64);
   const names = game.party.map(m => esc(m.name)).join('、');
   const treasure = game.flags.hasTreasure
     ? '一行が持ち帰った伝説の秘宝「竜の瞳」は、王国の宝として末永く守られたという。'
@@ -2751,7 +2757,17 @@ function initEvents() {
       updateStartButton();
     });
   });
-  document.querySelectorAll('.job-icon').forEach(el => { el.innerHTML = Art.heroInline(el.dataset.job, JOBS[el.dataset.job].weapon, 'cloth', 44); });
+  let heroGender = '男性';
+  const drawJobIcons = () => document.querySelectorAll('.job-icon').forEach(el => {
+    el.innerHTML = Art.heroInline(el.dataset.job, JOBS[el.dataset.job].weapon, 'cloth', 44, heroGender === '女性');
+  });
+  document.querySelectorAll('[data-gender]').forEach(b => b.addEventListener('click', () => {
+    heroGender = b.dataset.gender;
+    document.querySelectorAll('[data-gender]').forEach(x => x.classList.toggle('on', x === b));
+    Sound.sfx('select');
+    drawJobIcons();
+  }));
+  drawJobIcons();
   $('input-name').addEventListener('input', updateStartButton);
   function updateStartButton() { $('btn-start-game').disabled = !$('input-name').value.trim() || !selectedJob; }
 
@@ -2761,6 +2777,7 @@ function initEvents() {
     game = newGameState();
     initMaps();
     game.party = [createMember(name, selectedJob, 1)];
+    game.profiles.hero.gender = heroGender;
     game.currentMap = 'town';
     game.pos = { x: game.maps.town.homeX, y: game.maps.town.homeY };
     markExplored();

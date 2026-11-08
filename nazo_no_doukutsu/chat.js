@@ -233,7 +233,7 @@ const Chat = (() => {
     const rows = `<div class="dim2 talk-note">${aiReady() ? `仲間と自由に会話できます（${providerLabel()} が答えます）` : '仲間と会話できます。<br>メニューの「AI設定」でAIにつなぐと、どんな話題にも自由に答えてくれます。'}</div>
       <div class="member-picker">${ps.map(id => {
         const m = game.party.find(x => x.companion === id);
-        const face = id === 'princess' ? Art.princessInline(28) : Art.heroInline(m.job, m.weapon, m.armor, 28);
+        const face = id === 'princess' ? Art.princessInline(28) : Art.heroInline(m.job, m.weapon, m.armor, 28, isFemale(m));
         return `<button class="pick-btn" data-talk="${id}">${face}<span>${esc(who(id).name)}<small>${PERSONAS[id].job}</small></span></button>`;
       }).join('')}</div>`;
     openShop('[ はなす ]', rows);
@@ -245,7 +245,7 @@ const Chat = (() => {
     game.inputEnabled = false;
     const p = who(id);
     const m = game.party.find(x => x.companion === id);
-    $('chat-face').innerHTML = id === 'princess' ? Art.princessInline(40) : Art.heroInline(m.job, m.weapon, m.armor, 40);
+    $('chat-face').innerHTML = id === 'princess' ? Art.princessInline(40) : Art.heroInline(m.job, m.weapon, m.armor, 40, isFemale(m));
     $('chat-name').textContent = `${p.name}（${p.job}）`;
     updateBadge();
     const log = $('chat-log');
@@ -506,7 +506,7 @@ ${situation()}
       const m = game.party.find(x => x.companion === ln.id);
       const face = document.createElement('span');
       face.className = 'scene-face';
-      face.innerHTML = ln.id === 'princess' ? Art.princessInline(28) : Art.heroInline(m.job, m.weapon, m.armor, 28);
+      face.innerHTML = ln.id === 'princess' ? Art.princessInline(28) : Art.heroInline(m.job, m.weapon, m.armor, 28, isFemale(m));
       const name = document.createElement('b');
       name.textContent = who(ln.id).name;
       const text = document.createElement('span');
