@@ -3100,4 +3100,13 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     try { navigator.serviceWorker.register('./service-worker.js').catch(() => {}); } catch (e) {}
   });
+  // 新しい版に切り替わったら、タイトル画面にいる時だけ自動で読み直す（遊んでいる途中は邪魔しない）
+  let reloaded = false;
+  try {
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloaded || game.screen !== 'title') return;
+      reloaded = true;
+      location.reload();
+    });
+  } catch (e) {}
 }
