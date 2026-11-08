@@ -84,6 +84,39 @@ const DEFAULT_PROFILES = {
     memories: ['嵐の夜、暗黒竜に城からさらわれた', '洞窟の牢で、助けが来ることを信じて待ち続けた'] },
 };
 const MEMORY_MAX = 50;
+
+// 登場人物の紹介文
+const INTROS = {
+  ares: '王国の若き兵士。姫の護衛でありながら竜の襲撃を止められず、自分を責め続けている。剣の腕は確かで、仲間思いの熱血漢。',
+  rina: '町の魔法屋の看板娘。炎の魔法が自慢の勝ち気な少女で、口では強がるが根は優しい。甘い物に目がない。',
+  sera: '町の教会の修道女。孤児たちを育ててきた慈愛と、闇の魔物に屈しない芯の強さをあわせ持つ。温泉が好き。',
+  jin: '各地を渡り歩く流れ者の盗賊。皮肉屋で金にうるさいが、情には厚い。罠の解除と鍵開けの名人で、食べ歩きが趣味。',
+  princess: '王国の王女。気品があり芯の強い17歳。嵐の夜、暗黒竜ヴォルガンにさらわれ、洞窟の最深部に囚われている。',
+};
+function introCard(id, pr, opts = {}) {
+  const job = id === 'princess' ? '姫' : JOBS[COMPANIONS[id].job].name;
+  const face = id === 'princess' ? Art.princessInline(44)
+    : Art.heroInline(COMPANIONS[id].job, JOBS[COMPANIONS[id].job].weapon, 'cloth', 44, pr.gender === '女性');
+  const name = id === 'princess' ? `${pr.name}姫` : pr.name;
+  const custom = pr.personality !== DEFAULT_PROFILES[id].personality;
+  return `<div class="intro-card">
+    <div class="ic-face">${face}</div>
+    <div class="ic-info">
+      <div class="ic-name">${esc(name)}<span>${job}・${esc(pr.gender)}${pr.age !== '' ? `・${esc(pr.age)}歳` : ''}</span></div>
+      <div class="ic-text">${esc(custom ? pr.personality : INTROS[id])}</div>
+      ${opts.where ? `<div class="ic-where">${opts.where}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+// タイトル画面の「登場人物」
+function openCharacterList() {
+  const pr = game.profiles || DEFAULT_PROFILES;
+  const where = { ares: '町の城の門の前にいる', rina: '町の魔法屋の隣にいる', sera: '町の宿屋の近くにいる', jin: '町の道具屋の近くにいる', princess: '謎の洞窟の最深部に囚われている' };
+  const ids = ['ares', 'rina', 'sera', 'jin', 'princess'];
+  openShop('[ 登場人物 ]', `<div class="dim2" style="margin-bottom:4px">町の4人から2人まで仲間にでき、3人で冒険します。性別・年齢・性格・記憶は、ゲーム中に「なかま」→「設定」で変えられます。</div>`
+    + ids.map(id => introCard(id, pr[id] || DEFAULT_PROFILES[id], { where: where[id] })).join(''));
+}
 const GENDERS = ['男性', '女性', 'その他', '秘密'];
 
 // 記憶を書き足す（古いものから消える）
@@ -1873,6 +1906,7 @@ function talkCompanion(id) {
     return;
   }
   openShop(`[ ${pname}（${JOBS[c.job].name}） ]`, `
+    ${introCard(id, game.profiles[id])}
     <div class="dialog-text">${c.who.replace(c.name, esc(pname))}${c.hello}</div>
     <div class="shop-row-btns">
       <button class="shop-btn" id="btn-recruit">仲間にする</button>
@@ -2603,7 +2637,10 @@ function showStory(name) {
   Sound.bgm('title');
   const box = $('story-text');
   box.replaceChildren();
-  [...STORY, `そして今、一人の若者が立ち上がった——<br>その名は、${esc(name)}。`].forEach((t, i) => {
+  const hp = game.profiles.hero;
+  const youth = hp.gender === '女性' ? '一人の娘' : hp.gender === '男性' ? '一人の若者' : '一人の旅人';
+  const intro = hp.personality ? `<br><small>${esc(hp.personality)}</small>` : '';
+  [...STORY, `そして今、${youth}が立ち上がった——<br>その名は、${esc(name)}。${intro}`].forEach((t, i) => {
     const p = document.createElement('p');
     p.innerHTML = t;
     p.style.animationDelay = `${i * 0.9}s`;
@@ -2746,6 +2783,7 @@ function initEvents() {
 
   $('btn-new-game').addEventListener('click', () => { Sound.sfx('select'); showScreen('create'); });
   $('btn-load-title').addEventListener('click', () => { Sound.sfx('select'); openLoadSlotUI(); });
+  $('btn-chars-title').addEventListener('click', () => { Sound.sfx('select'); openCharacterList(); });
 
   let selectedJob = null;
   document.querySelectorAll('.job-card').forEach(card => {
@@ -2778,6 +2816,9 @@ function initEvents() {
     initMaps();
     game.party = [createMember(name, selectedJob, 1)];
     game.profiles.hero.gender = heroGender;
+    const age = parseInt($('input-age').value, 10);
+    game.profiles.hero.age = Number.isFinite(age) ? clamp(age, 0, 999) : '';
+    game.profiles.hero.personality = $('input-intro').value.trim().slice(0, 200);
     game.currentMap = 'town';
     game.pos = { x: game.maps.town.homeX, y: game.maps.town.homeY };
     markExplored();

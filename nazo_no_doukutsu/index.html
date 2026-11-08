@@ -30,6 +30,7 @@
       <div class="title-buttons">
         <button class="btn" id="btn-new-game">はじめから</button>
         <button class="btn" id="btn-load-title" disabled>つづきから</button>
+        <button class="btn" id="btn-chars-title">登場人物</button>
         <button class="btn" id="btn-ai-title">AI設定</button>
       </div>
       <p class="title-hint">画面に触れると音楽が流れます（右上の♪で切替）<br>PC：矢印キー / WASD で移動、Enterで決定<br>スマホ：行きたい方向の画面を押し続けると移動（十字キーも使えます）</p>
@@ -50,6 +51,14 @@
           <button class="pick-btn on" data-gender="男性" type="button">男性</button>
           <button class="pick-btn" data-gender="女性" type="button">女性</button>
         </div>
+      </div>
+      <div class="create-row">
+        <label for="input-age">年齢</label>
+        <input type="number" id="input-age" min="0" max="999" placeholder="（任意）" class="age-input">
+      </div>
+      <div class="create-row top">
+        <label for="input-intro">紹介</label>
+        <textarea id="input-intro" maxlength="200" rows="2" placeholder="（任意）例：羊飼いの家に育った。無口だが、困った人を放っておけない。"></textarea>
       </div>
       <h3 class="section-title">職業を選ぶ</h3>
       <div class="job-grid">

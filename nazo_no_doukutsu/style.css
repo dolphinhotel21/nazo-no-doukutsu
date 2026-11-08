@@ -680,3 +680,20 @@ button { font-family: inherit; }
 
 .gender-pick { display: flex; gap: 6px; }
 .gender-pick .pick-btn { padding: 6px 16px; font-size: 14px; }
+
+/* 登場人物の紹介 */
+.intro-card { display: flex; gap: 10px; align-items: flex-start; border: 1px solid #1a3a3a; padding: 8px; margin-bottom: 6px; }
+.ic-face svg { image-rendering: pixelated; display: block; }
+.ic-info { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.ic-name { color: #fff; font-size: 15px; }
+.ic-name span { color: #8ac; font-size: 11px; margin-left: 8px; }
+.ic-text { color: #ccc; font-size: 13px; line-height: 1.6; }
+.ic-where { color: #c9a86a; font-size: 11px; }
+.create-row.top { align-items: flex-start; }
+.create-row textarea, .create-row .age-input {
+  background: #111; color: var(--green); border: 1px solid var(--green); padding: 6px 8px;
+  font-family: inherit; font-size: 15px; outline: none; user-select: text; -webkit-user-select: text;
+}
+.create-row textarea { flex: 1; resize: vertical; line-height: 1.5; }
+.create-row .age-input { width: 100px; }
+#story-text small { display: block; color: #aab; font-size: 13px; margin-top: 6px; }
