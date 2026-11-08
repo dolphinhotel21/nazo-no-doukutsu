@@ -2068,7 +2068,7 @@ function loadFromSlot(slot) {
   const raw = store.getItem(CONFIG.SAVE_SLOT_KEY + slot);
   if (!raw) return false;
   try {
-    const d = JSON.parse(raw);
+    const d = sanitizeSave(JSON.parse(raw));
     const st = newGameState();
     Object.assign(st, { party: d.party, gold: d.gold, items: d.items, pos: d.pos, currentMap: d.currentMap });
     st.maps = {};
@@ -2082,6 +2082,46 @@ function loadFromSlot(slot) {
     console.error('ロード失敗:', e);
     return false;
   }
+}
+
+// 壊れた・書き換えられたセーブデータでも動くよう、中身を点検して直す
+function sanitizeSave(d) {
+  const num = (v, def, min, max) => (Number.isFinite(v) ? clamp(Math.floor(v), min, max) : def);
+  if (!d || d.version !== 3 || !Array.isArray(d.party) || !d.party.length || !d.maps) throw new Error('invalid save');
+  d.party = d.party.slice(0, CONFIG.PARTY_MAX).map(m => {
+    const job = JOBS[m.job] ? m.job : 'warrior';
+    const base = createMember('?', job, 1);
+    const r = {
+      ...base,
+      name: String(m.name || '？').slice(0, 8),
+      companion: COMPANIONS[m.companion] ? m.companion : null,
+      lv: num(m.lv, 1, 1, CONFIG.MAX_LV),
+      exp: num(m.exp, 0, 0, 1e7),
+      maxHp: num(m.maxHp, base.maxHp, 1, 9999),
+      maxMp: num(m.maxMp, base.maxMp, 0, 9999),
+      baseAtk: num(m.baseAtk, base.baseAtk, 0, 999),
+      baseDef: num(m.baseDef, base.baseDef, 0, 999),
+      weapon: WEAPONS[m.weapon] ? m.weapon : JOBS[job].weapon,
+      armor: ARMORS[m.armor] ? m.armor : 'cloth',
+      spells: Array.isArray(m.spells) ? m.spells.filter(x => SPELLS[x]) : base.spells,
+      poisoned: !!m.poisoned,
+    };
+    r.expNext = expNeeded(r.lv);
+    r.hp = num(m.hp, r.maxHp, 0, r.maxHp);
+    r.mp = num(m.mp, 0, 0, getMaxMp(r));
+    return r;
+  });
+  d.gold = num(d.gold, 0, 0, 9999999);
+  d.items = Array.isArray(d.items) ? d.items.filter(it => it && CONSUMABLES[it.id]).map(it => ({ id: it.id, count: num(it.count, 1, 1, CONFIG.MAX_ITEMS) })) : [];
+  const ids = ['town', 'field', ...DUNGEONS];
+  for (const id of ids) {
+    const m = d.maps[id];
+    if (!m || !Array.isArray(m.grid) || !m.grid.length || m.grid.some(r => typeof r !== 'string' || r.length !== m.grid.length)) throw new Error('invalid map');
+  }
+  if (!ids.includes(d.currentMap)) d.currentMap = 'town';
+  const S = d.maps[d.currentMap].grid.length;
+  d.pos = { x: num(d.pos && d.pos.x, 1, 0, S - 1), y: num(d.pos && d.pos.y, 1, 0, S - 1) };
+  return d;
 }
 
 function getSaveSlots() {
@@ -2485,3 +2525,10 @@ function init() {
 }
 
 init();
+
+// オフライン対応（使えない環境では何もしない）
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    try { navigator.serviceWorker.register('./service-worker.js').catch(() => {}); } catch (e) {}
+  });
+}
