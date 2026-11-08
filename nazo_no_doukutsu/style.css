@@ -118,11 +118,12 @@ button { font-family: inherit; }
    ============================= */
 .story-container {
   flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;
-  gap: 30px; padding: 30px; background: radial-gradient(ellipse at center, #120d1f 0%, #050505 75%);
+  gap: 30px; padding: 30px max(14px, 4vw); background: radial-gradient(ellipse at center, #120d1f 0%, #050505 75%);
 }
 #story-text { max-width: 520px; text-align: center; }
 #story-text p {
-  color: #ddd; font-size: 16px; line-height: 1.9; margin-bottom: 14px;
+  color: #ddd; font-size: min(16px, 4.3vw); line-height: 1.9; margin-bottom: 14px;
+  line-break: strict; word-break: auto-phrase; text-wrap: balance;
   opacity: 0; animation: fadeUp 1s ease forwards;
 }
 #story-text p:last-child { color: #ffd700; }
