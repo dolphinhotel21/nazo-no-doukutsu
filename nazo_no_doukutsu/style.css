@@ -178,6 +178,9 @@ button { font-family: inherit; }
 .status-line { font-size: 13px; color: var(--green-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .status-label { font-size: 11px; color: #0af; }
 .status-divider { height: 1px; background: var(--line); }
+#st-hero { display: flex; justify-content: center; margin-bottom: 4px; }
+#st-hero svg { image-rendering: pixelated; }
+#status-panel .bar-num { font-size: 11px; min-width: 52px; text-align: right; align-self: center; }
 .items-list { font-size: 12px; color: #aaa; display: flex; flex-direction: column; gap: 2px; }
 #btn-menu { margin-top: auto; }
 
@@ -218,24 +221,95 @@ button { font-family: inherit; }
 #battle-window.boss { border-color: #ff3333; box-shadow: 0 0 40px rgba(255, 50, 50, 0.45); }
 
 #battle-header { text-align: center; color: #ff5555; font-size: 16px; border-bottom: 1px solid #333; padding-bottom: 8px; }
-#battle-enemy-area { display: flex; flex-direction: column; align-items: center; gap: 6px; position: relative; }
-#battle-enemy-sprite { min-height: 100px; display: flex; align-items: flex-end; justify-content: center; }
-#battle-enemy-sprite svg { image-rendering: pixelated; filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.15)); }
-#battle-enemy-sprite.dead { animation: vanish 0.8s ease forwards; }
-@keyframes vanish { to { opacity: 0; transform: scale(1.2); filter: brightness(3); } }
-#battle-enemy-name { font-size: 18px; color: #ff7777; }
-#battle-enemy-hp-bar { display: flex; align-items: center; gap: 8px; font-size: 13px; width: 100%; }
-#battle-hp-gauge { flex: 1; height: 10px; background: #1a1a1a; border: 1px solid #333; overflow: hidden; }
-#battle-hp-fill { height: 100%; background: #00cc33; transition: width 0.35s; }
-#battle-enemy-hp-num { min-width: 70px; text-align: right; color: #ccc; }
-#battle-status-msg { font-size: 12px; color: #c6f; min-height: 14px; }
 
-#battle-player-bar {
+/* 左に主人公、右に敵 */
+#battle-stage {
   position: relative;
-  display: flex; gap: 14px; justify-content: center; flex-wrap: wrap;
-  font-size: 14px; padding: 6px; border: 1px solid #1a3a1a; background: #050805;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: end;
+  padding: 8px 4px 4px;
+  border: 1px solid #1a2a3a;
+  background: radial-gradient(ellipse at 50% 85%, rgba(40, 60, 120, 0.25), transparent 70%);
 }
-#battle-turn-msg { text-align: center; color: #888; font-size: 12px; }
+.fighter { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+.fighter-sprite { min-height: 100px; display: flex; align-items: flex-end; justify-content: center; }
+.fighter-sprite svg { image-rendering: pixelated; filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.12)); }
+#battle-hero svg { filter: drop-shadow(0 0 6px rgba(80, 140, 255, 0.35)); }
+.fighter-name { font-size: 15px; color: #cfe0ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.fighter-name.enemy { color: #ff8888; }
+.fighter-status { font-size: 12px; min-height: 15px; color: #c6f; }
+#battle-enemy-sprite.dead { animation: vanish 0.8s ease forwards; }
+#battle-enemy-sprite.appear { animation: appear 0.45s ease-out; }
+#battle-hero.dead { animation: fallen 0.8s ease forwards; }
+#battle-hero.flee { animation: flee 0.6s ease-in forwards; }
+.casting { animation: casting 0.4s ease-out; }
+@keyframes vanish { to { opacity: 0; transform: scale(1.2); filter: brightness(3); } }
+@keyframes appear { from { opacity: 0; transform: scale(0.6); filter: brightness(3); } }
+@keyframes fallen { to { transform: rotate(-90deg) translateX(-20px); opacity: 0.4; filter: grayscale(1); } }
+@keyframes flee { to { transform: translateX(-120px); opacity: 0; } }
+@keyframes casting { 0% { filter: brightness(1); } 40% { filter: brightness(2.2) drop-shadow(0 0 12px #8af); } 100% { filter: brightness(1); } }
+
+/* 青い体力バー（減った分は赤く残ってから縮む） */
+.bar-row { display: flex; align-items: center; gap: 5px; width: 100%; }
+.bar-label { font-size: 11px; color: #8ab4ff; width: 18px; flex: 0 0 auto; }
+.bar {
+  position: relative; flex: 1; height: 10px; min-width: 40px;
+  background: #0a0e1a; border: 1px solid #2a3a6a; overflow: hidden;
+}
+.bar-lag, .bar-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; }
+.bar-lag { background: #e03030; }
+.bar-fill {
+  background: linear-gradient(#5aa0ff, #2a5ad8);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: width 0.25s ease-out;
+}
+.bar.mp .bar-fill { background: linear-gradient(#5ae0e0, #1a8a9a); }
+.bar.enemy .bar-fill { background: linear-gradient(#ff7a5a, #c0301a); }
+.bar.enemy .bar-lag { background: #ffd84a; }
+.bar.low:not(.mp):not(.enemy) .bar-fill { animation: lowpulse 0.8s infinite; }
+@keyframes lowpulse { 50% { filter: brightness(1.8); } }
+.bar-num { font-size: 12px; color: #ccd; align-self: flex-end; line-height: 1; }
+
+#battle-turn-msg { text-align: center; color: #888; font-size: 12px; min-height: 14px; }
+#battle-commands.busy { opacity: 0.45; pointer-events: none; }
+
+/* 魔法・攻撃のエフェクト */
+#fx-layer { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: 6; }
+.proj { position: absolute; transform: translate(-50%, -50%); border-radius: 50%; }
+.proj-fire { width: 20px; height: 20px; background: radial-gradient(circle, #fff 0 20%, #ffd040 35%, #ff6a00 65%, rgba(255, 60, 0, 0) 72%); box-shadow: 0 0 16px #ff6a00, -14px 0 14px rgba(255, 120, 0, 0.5); }
+.proj-breath { width: 30px; height: 30px; background: radial-gradient(circle, #fff 0 15%, #ffcc33 35%, #ff4400 65%, rgba(255, 40, 0, 0) 72%); box-shadow: 0 0 22px #ff4400; }
+.proj-ice { width: 14px; height: 14px; border-radius: 2px; background: linear-gradient(135deg, #fff, #8af0ff 50%, #2aa8e8); box-shadow: 0 0 12px #6ad8ff; rotate: 45deg; }
+.proj-thunder { width: 40px; height: 8px; border-radius: 3px; background: #ffffa0; box-shadow: 0 0 14px #ffff40, 0 0 30px #fff; }
+.proj-holy { width: 22px; height: 22px; background: radial-gradient(circle, #fff 0 35%, #fff8c0 55%, rgba(255, 255, 200, 0) 72%); box-shadow: 0 0 20px #fff; }
+.proj-poison { width: 16px; height: 16px; background: radial-gradient(circle at 35% 35%, #e0a0ff, #8a2ae0 60%, #4a0a8a); box-shadow: 0 0 10px #a040ff; }
+.proj-dark { width: 22px; height: 22px; background: radial-gradient(circle, #ffb0ff 0 15%, #c030ff 40%, #3a0060 70%, rgba(40, 0, 60, 0) 74%); box-shadow: 0 0 16px #c030ff; }
+
+.impact { position: absolute; transform: translate(-50%, -50%); pointer-events: none; animation: burst 0.45s ease-out forwards; border-radius: 50%; }
+.impact-fire { width: 70px; height: 70px; background: radial-gradient(circle, rgba(255, 255, 200, 0.9), rgba(255, 120, 0, 0.7) 45%, rgba(255, 40, 0, 0) 70%); }
+.impact-ice { width: 70px; height: 70px; background: radial-gradient(circle, rgba(255, 255, 255, 0.9), rgba(120, 220, 255, 0.6) 45%, rgba(0, 150, 255, 0) 70%); }
+.impact-thunder { width: 90px; height: 90px; background: radial-gradient(circle, rgba(255, 255, 255, 1), rgba(255, 255, 80, 0.6) 40%, rgba(255, 255, 0, 0) 70%); }
+.impact-holy { width: 90px; height: 90px; background: radial-gradient(circle, rgba(255, 255, 255, 1), rgba(255, 250, 200, 0.6) 45%, rgba(255, 255, 255, 0) 70%); }
+.impact-poison { width: 60px; height: 60px; background: radial-gradient(circle, rgba(220, 150, 255, 0.8), rgba(130, 30, 220, 0.5) 45%, rgba(100, 0, 200, 0) 70%); }
+.impact-dark { width: 70px; height: 70px; background: radial-gradient(circle, rgba(255, 180, 255, 0.9), rgba(160, 30, 220, 0.6) 45%, rgba(60, 0, 100, 0) 70%); }
+.impact-slash, .impact-crit, .impact-claw { border-radius: 0; width: 70px; height: 4px; background: #fff; box-shadow: 0 0 10px #fff; animation: slash 0.3s ease-out forwards; }
+.impact-crit { height: 6px; background: #ffd700; box-shadow: 0 0 16px #ffd700; width: 90px; }
+.impact-claw { background: #ff6a6a; box-shadow: 0 0 10px #f44; }
+.impact-buff { width: 90px; height: 90px; border: 3px solid #4ab0ff; box-shadow: 0 0 16px #4ab0ff, inset 0 0 16px #4ab0ff; animation: ring 0.55s ease-out forwards; }
+.impact-guard { width: 80px; height: 80px; border: 3px solid #aaa; animation: ring 0.5s ease-out forwards; }
+@keyframes burst { from { transform: translate(-50%, -50%) scale(0.3); opacity: 1; } to { transform: translate(-50%, -50%) scale(1.5); opacity: 0; } }
+@keyframes slash { from { transform: translate(-50%, -50%) rotate(-35deg) scaleX(0.1); opacity: 1; } 60% { transform: translate(-50%, -50%) rotate(-35deg) scaleX(1); opacity: 1; } to { transform: translate(-50%, -50%) rotate(-35deg) scaleX(1); opacity: 0; } }
+@keyframes ring { from { transform: translate(-50%, -50%) scale(0.4); opacity: 1; } to { transform: translate(-50%, -50%) scale(1.3); opacity: 0; } }
+
+.spark { position: absolute; width: 6px; height: 6px; border-radius: 50%; transform: translate(-50%, -50%); animation: rise 0.9s ease-out forwards; opacity: 0; }
+.spark-heal { background: #6aff9a; box-shadow: 0 0 8px #3f8; }
+.spark-mp { background: #6ae8ff; box-shadow: 0 0 8px #3df; }
+.spark-buff { background: #6ab4ff; box-shadow: 0 0 8px #48f; }
+.spark-guard { background: #ccc; box-shadow: 0 0 6px #fff; }
+.spark-level { background: #ffd700; box-shadow: 0 0 10px #ffd700; width: 8px; height: 8px; }
+.spark-smoke { background: #888; width: 22px; height: 22px; box-shadow: 0 0 10px #666; }
+@keyframes rise { 0% { opacity: 0; transform: translate(-50%, 0) scale(0.5); } 25% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -60px) scale(1); } }
 
 .cmd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .battle-btn {
@@ -263,7 +337,7 @@ button { font-family: inherit; }
   animation: popUp 0.9s ease-out forwards;
   z-index: 5;
 }
-#battle-player-bar .pop-num { top: -10px; font-size: 22px; }
+#fighter-player .pop-num { top: 25%; font-size: 24px; }
 .pop-enemy { color: #fff; }
 .pop-crit { color: #ffd700; font-size: 34px; }
 .pop-magic { color: #9cf; }
@@ -431,13 +505,21 @@ button { font-family: inherit; }
     border-top: 1px solid var(--line);
   }
   .status-block { flex-direction: row; gap: 8px; }
-  .status-divider, .st-items-wrap, .st-equip, #st-job, .st-exp { display: none; }
+  .status-divider, .st-items-wrap, .st-equip, #st-job, .st-exp, #st-def, #st-atk { display: none; }
+  #st-hero { margin: 0; }
+  #st-hero svg { width: 30px; height: 30px; }
+  .st-vital { flex: 1 1 100%; order: 5; gap: 10px; }
+  .st-vital .bar-row { flex: 1; }
   .status-line { font-size: 12px; }
   #btn-menu { margin: 0 0 0 auto; width: auto; padding: 4px 10px; }
   #message-log { height: 50px; padding: 4px 8px; }
   .msg-line { font-size: 12px; min-height: 14px; }
 
-  #battle-window { padding: 12px; gap: 8px; }
+  #battle-window { padding: 10px; gap: 7px; }
+  #battle-stage { gap: 8px; }
+  .fighter-sprite { min-height: 80px; }
+  .fighter-sprite svg { width: 80px; height: 80px; }
+  #battle-window.boss #battle-enemy-sprite svg { width: 100px; height: 100px; }
   #battle-log { height: 70px; font-size: 12px; }
   .battle-btn { padding: 10px; }
 }

@@ -565,8 +565,129 @@ const Art = (() => {
     return inlineSVG(art[0], art[1], px);
   }
 
+  // ---------- 主人公（戦闘・ステータス用 16×16、右向き） ----------
+  // 職業ごとの頭、防具ごとの胴と脚、武器ごとの手持ちを重ねて描く
+  const HERO_BASE = [
+    '................',
+    '......hhhh......',
+    '.....hhhhhh.....',
+    '.....hhssse.....',
+    '.....hsssss.....',
+    '......ssss......',
+    '.....TTTTTT.....',
+    '....TTTTTTTT....',
+    '....sTTTTTTs....',
+    '....sTTTTTTs....',
+    '.....tttttt.....',
+    '.....LLLLLL.....',
+    '.....LL..LL.....',
+    '.....LL..LL.....',
+    '.....bb..bb.....',
+    '....bbb..bbb....',
+  ];
+
+  const HEADS = {
+    warrior: { pal: { h: '#9a9aa8', H: '#c8c8d8', r: '#d02a1a' }, px: [[7, 0, 'r'], [8, 0, 'r'], [6, 1, 'H'], [5, 3, 'h']] },
+    mage:    { pal: { h: '#2a2a8a', H: '#ffd800' }, px: [[8, 0, 'h'], [7, 0, 'h'], [4, 2, 'h'], [11, 2, 'h'], [8, 1, 'H']] },
+    priest:  { pal: { h: '#e8e8e8', H: '#ffd800' }, px: [[5, 4, 'h'], [5, 5, 'h'], [10, 5, 'h'], [7, 1, 'H']] },
+    thief:   { pal: { h: '#2a7a2a', H: '#4a2a12' }, px: [[4, 2, 'h'], [4, 3, 'h'], [5, 3, 'H'], [5, 4, 'H']] },
+  };
+
+  const ARMOR_LOOK = {
+    cloth:         { T: null, t: null, L: '#4a3a2a' },
+    leather_armor: { T: '#8a5a2a', t: '#4a2a12', L: '#5a4030' },
+    iron_armor:    { T: '#9a9aa8', t: '#5a5a68', L: '#6a6a78', pads: '#c8c8d8' },
+    mithril_armor: { T: '#a8d8f8', t: '#4a7ab8', L: '#6a9ac8', pads: '#e8f8ff', shine: true },
+    magic_robe:    { T: '#3a3ab8', t: '#ffd800', L: '#3a3ab8', robe: true },
+    holy_robe:     { T: '#f4f4f4', t: '#ffd800', L: '#f4f4f4', robe: true, shine: true },
+    shadow_armor:  { T: '#22222e', t: '#b0202a', L: '#22222e', mask: true },
+  };
+
+  const JOB_BODY = {
+    warrior: { T: '#c0281a', t: '#6a1408' },
+    mage:    { T: '#2244cc', t: '#14226a' },
+    priest:  { T: '#d8d8d8', t: '#8a8a8a' },
+    thief:   { T: '#2a7a2a', t: '#143814' },
+  };
+
+  // 武器: 手（11,8）に持つ。[x, y, 色記号]
+  function swordPx(len, guard) {
+    const px = [[12, 8, 'g'], [12, 9, 'g'], [11, 7, guard], [12, 7, guard], [13, 7, guard]];
+    for (let i = 1; i <= len; i++) px.push([12, 7 - i, i === len ? 'W' : 'w']);
+    for (let i = 2; i < len; i++) px.push([13, 7 - i, 'W']);
+    return px;
+  }
+  function staffPx(top) {
+    const px = [];
+    for (let y = top; y <= 13; y++) px.push([12, y, 'g']);
+    return px;
+  }
+  const WEAPON_LOOK = {
+    wooden_sword:  { pal: { w: '#a0703a', W: '#c89858', g: '#5a3a1a', G: '#5a3a1a' }, px: swordPx(3, 'G') },
+    dagger:        { pal: { w: '#b8b8c8', W: '#e8e8f8', g: '#5a3a1a', G: '#8a8a9a' }, px: swordPx(2, 'G') },
+    iron_sword:    { pal: { w: '#9a9aa8', W: '#d8d8e8', g: '#5a3a1a', G: '#8a6a2a' }, px: swordPx(5, 'G') },
+    mithril_sword: { pal: { w: '#7ab8e8', W: '#d8f0ff', g: '#3a3a6a', G: '#c0c0d0' }, px: swordPx(6, 'G') },
+    hero_sword:    { pal: { w: '#ffd84a', W: '#fff8c0', g: '#7a2a8a', G: '#ffd800', x: '#fff' }, px: [...swordPx(6, 'G'), [14, 1, 'x'], [11, 2, 'x']] },
+    ninja_blade:   { pal: { w: '#4a4a58', W: '#c8c8d8', g: '#1a1a1a', G: '#1a1a1a' }, px: swordPx(5, 'G') },
+    wind_blade:    { pal: { w: '#5ad88a', W: '#c8ffd8', g: '#1a3a2a', G: '#2a8a5a', x: '#c8ffd8' }, px: [...swordPx(5, 'G'), [14, 2, 'x'], [10, 3, 'x']] },
+    mace:          { pal: { g: '#5a3a1a', m: '#8a8a9a', M: '#c8c8d8' }, px: [[12, 9, 'g'], [12, 8, 'g'], [12, 7, 'g'], [12, 6, 'g'], [11, 4, 'm'], [12, 4, 'M'], [13, 4, 'm'], [11, 5, 'm'], [12, 5, 'm'], [13, 5, 'm'], [12, 3, 'm'], [10, 4, 'm'], [14, 4, 'm']] },
+    thin_staff:    { pal: { g: '#8a5a2a' }, px: staffPx(3) },
+    magic_staff:   { pal: { g: '#8a5a2a', o: '#3a8aff', O: '#bfe0ff' }, px: [...staffPx(3), [12, 1, 'o'], [13, 1, 'o'], [12, 2, 'O'], [13, 2, 'o']] },
+    sage_staff:    { pal: { g: '#5a2a6a', o: '#c03aff', O: '#f0c0ff', y: '#ffd800' }, px: [...staffPx(3), [11, 1, 'y'], [14, 1, 'y'], [12, 0, 'o'], [13, 0, 'O'], [12, 1, 'o'], [13, 1, 'o'], [12, 2, 'o'], [13, 2, 'o']] },
+    holy_staff:    { pal: { g: '#c8a040', y: '#ffd800', Y: '#fff8c0' }, px: [...staffPx(3), [12, 0, 'Y'], [12, 1, 'y'], [11, 1, 'y'], [13, 1, 'y'], [12, 2, 'y']] },
+  };
+
+  function heroGrid(job, weapon, armor) {
+    const g = HERO_BASE.map(r => r.split(''));
+    const pal = { s: '#e8a878', e: '#101010', b: '#3a2a1a' };
+    const put = (x, y, c) => { if (g[y] && x >= 0 && x < 16) g[y][x] = c; };
+
+    const head = HEADS[job] || HEADS.warrior;
+    Object.assign(pal, head.pal);
+    head.px.forEach(([x, y, c]) => put(x, y, c));
+
+    const body = JOB_BODY[job] || JOB_BODY.warrior;
+    const a = ARMOR_LOOK[armor] || ARMOR_LOOK.cloth;
+    pal.T = a.T || body.T;
+    pal.t = a.t || body.t;
+    pal.L = a.L;
+    if (a.pads) { pal.p = a.pads; put(4, 6, 'p'); put(11, 6, 'p'); put(4, 7, 'p'); put(11, 7, 'p'); }
+    if (a.robe) {
+      for (let y = 11; y <= 13; y++) for (let x = 5; x <= 10; x++) put(x, y, 'T');
+      put(4, 13, 'T'); put(11, 13, 'T');
+      for (let y = 6; y <= 13; y++) put(7, y, 't');
+    }
+    if (a.mask) { put(6, 5, 't'); put(7, 5, 't'); put(8, 5, 't'); put(9, 5, 't'); }
+    if (a.shine) { pal.Z = '#ffffff'; put(6, 7, 'Z'); }
+
+    const w = WEAPON_LOOK[weapon];
+    if (w) {
+      // 武器の色記号が体の色と重ならないよう、別名に置き換える
+      const map = {};
+      for (const [k, v] of Object.entries(w.pal)) { const nk = 'w_' + k; map[k] = nk; pal[nk] = v; }
+      w.px.forEach(([x, y, c]) => put(x, y, map[c]));
+    }
+    return { rows: g, pal };
+  }
+
+  // 複数文字の色記号に対応した描画（配列のグリッド用）
+  function gridSVG(rows, pal, px) {
+    let rects = '';
+    rows.forEach((row, y) => row.forEach((c, x) => {
+      const col = pal[c];
+      if (col) rects += `<rect x="${x}" y="${y}" width="1.05" height="1.05" fill="${col}"/>`;
+    }));
+    const size = px ? ` width="${px}" height="${px}"` : '';
+    return `<svg xmlns="http://www.w3.org/2000/svg"${size} viewBox="0 0 ${rows[0].length} ${rows.length}" shape-rendering="crispEdges">${rects}</svg>`;
+  }
+
+  function heroInline(job, weapon, armor, px) {
+    const { rows, pal } = heroGrid(job, weapon, armor);
+    return gridSVG(rows, pal, px);
+  }
+
   return {
     cellLayers, floorTile, playerSprite, princessSprite,
-    playerInline, princessInline, enemySVG,
+    playerInline, princessInline, enemySVG, heroInline,
   };
 })();

@@ -87,6 +87,7 @@
       <div id="map-area"><div id="map-container"></div></div>
       <div id="status-panel">
         <div class="status-block st-who">
+          <div id="st-hero"></div>
           <div class="status-line" id="st-name">─</div>
           <div class="status-line" id="st-job">─</div>
           <div class="status-line" id="st-lv">LV 1</div>
@@ -94,8 +95,8 @@
         </div>
         <div class="status-divider"></div>
         <div class="status-block st-vital">
-          <div class="status-line" id="st-hp">HP</div>
-          <div class="status-line" id="st-mp">MP</div>
+          <div class="bar-row"><span class="bar-label">HP</span><div class="bar" id="sp-hp"><div class="bar-lag"></div><div class="bar-fill"></div></div><span class="bar-num" id="sp-hp-num"></span></div>
+          <div class="bar-row"><span class="bar-label">MP</span><div class="bar mp" id="sp-mp"><div class="bar-lag"></div><div class="bar-fill"></div></div><span class="bar-num" id="sp-mp-num"></span></div>
           <div class="status-line" id="st-atk">攻</div>
           <div class="status-line" id="st-def">防</div>
         </div>
@@ -137,16 +138,25 @@
   <div id="battle-overlay" class="hidden">
     <div id="battle-window">
       <div id="battle-header"></div>
-      <div id="battle-enemy-area">
-        <div id="battle-enemy-sprite"></div>
-        <div id="battle-enemy-name"></div>
-        <div id="battle-enemy-hp-bar">
-          <div id="battle-hp-gauge"><div id="battle-hp-fill"></div></div>
-          <span id="battle-enemy-hp-num"></span>
+      <div id="battle-stage">
+        <div class="fighter" id="fighter-player">
+          <div class="fighter-sprite" id="battle-hero"></div>
+          <div class="fighter-name" id="battle-hero-name"></div>
+          <div class="bar-row"><span class="bar-label">HP</span><div class="bar" id="bh-hp"><div class="bar-lag"></div><div class="bar-fill"></div></div></div>
+          <div class="bar-num" id="bh-hp-num"></div>
+          <div class="bar-row"><span class="bar-label">MP</span><div class="bar mp" id="bh-mp"><div class="bar-lag"></div><div class="bar-fill"></div></div></div>
+          <div class="bar-num" id="bh-mp-num"></div>
+          <div class="fighter-status" id="battle-hero-status"></div>
         </div>
-        <div id="battle-status-msg"></div>
+        <div class="fighter" id="fighter-enemy">
+          <div class="fighter-sprite" id="battle-enemy-sprite"></div>
+          <div class="fighter-name enemy" id="battle-enemy-name"></div>
+          <div class="bar-row"><span class="bar-label">HP</span><div class="bar enemy" id="be-hp"><div class="bar-lag"></div><div class="bar-fill"></div></div></div>
+          <div class="bar-num" id="be-hp-num"></div>
+          <div class="fighter-status" id="battle-status-msg"></div>
+        </div>
+        <div id="fx-layer"></div>
       </div>
-      <div id="battle-player-bar"></div>
       <div id="battle-turn-msg"></div>
       <div id="battle-commands">
         <div id="battle-main-cmd" class="cmd-grid">

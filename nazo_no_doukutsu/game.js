@@ -429,10 +429,11 @@ function updateStatusPanel() {
   $('st-job').textContent = JOBS[p.job].name;
   $('st-lv').textContent = `LV ${p.lv}`;
   $('st-exp').textContent = `EXP ${p.exp}/${p.expNext}`;
-  const hpEl = $('st-hp');
-  hpEl.textContent = `HP ${p.hp}/${p.maxHp}`;
-  hpEl.style.color = hpColor(p.hp, p.maxHp);
-  $('st-mp').textContent = `MP ${p.mp}/${getMaxMp(p)}`;
+  setBar('sp-hp', p.hp, p.maxHp);
+  setBar('sp-mp', p.mp, getMaxMp(p));
+  const look = `${p.job}|${p.weapon}|${p.armor}`;
+  const hero = $('st-hero');
+  if (hero.dataset.look !== look) { hero.dataset.look = look; hero.innerHTML = Art.heroInline(p.job, p.weapon, p.armor, 64); }
   $('st-atk').textContent = `攻 ${getAtk(p)}`;
   $('st-def').textContent = `防 ${getDef(p)}`;
   $('st-weapon').textContent = `武: ${WEAPONS[p.weapon].name}`;
@@ -721,6 +722,108 @@ function shake(id) {
   el.classList.add('shake');
 }
 
+// ---------- 戦闘エフェクト（魔法が飛ぶ・踏み込み・斬撃） ----------
+const Fx = (() => {
+  const SPRITE = { player: 'battle-hero', enemy: 'battle-enemy-sprite' };
+
+  function centerOf(who) {
+    const stage = $('battle-stage').getBoundingClientRect();
+    const r = $(SPRITE[who]).getBoundingClientRect();
+    return { x: r.left - stage.left + r.width / 2, y: r.top - stage.top + r.height / 2, w: r.width, h: r.height };
+  }
+
+  function spawn(cls, x, y) {
+    const el = document.createElement('div');
+    el.className = cls;
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    $('fx-layer').appendChild(el);
+    return el;
+  }
+
+  function supportsAnim() { return typeof Element !== 'undefined' && Element.prototype.animate; }
+
+  // 弾を飛ばし、当たった時に onHit を呼ぶ
+  function projectile(kind, from, to, onHit) {
+    let a, b;
+    try { a = centerOf(from); b = centerOf(to); } catch (e) { onHit(); return; }
+    if (!supportsAnim()) { onHit(); return; }
+    // 手元から出す（主人公は右手側、敵は口元あたり）
+    const sx = a.x + (from === 'player' ? a.w * 0.3 : -a.w * 0.3);
+    const sy = a.y - a.h * (from === 'player' ? 0.15 : 0.05);
+    const dx = b.x - sx, dy = b.y - sy;
+    const dur = kind === 'thunder' ? 220 : kind === 'breath' ? 520 : 420;
+    const count = kind === 'breath' ? 6 : kind === 'ice' ? 3 : 1;
+    let done = false;
+    for (let i = 0; i < count; i++) {
+      const el = spawn(`proj proj-${kind}`, sx, sy);
+      const jitter = (kind === 'breath' || kind === 'ice') ? (i - (count - 1) / 2) * 10 : 0;
+      const arc = kind === 'poison' ? -40 : 0;
+      const frames = [
+        { transform: `translate(-50%, -50%) translate(0px, ${jitter}px) scale(0.6)`, opacity: 0.2 },
+        { transform: `translate(-50%, -50%) translate(${dx * 0.5}px, ${dy * 0.5 + arc + jitter}px) scale(1)`, opacity: 1, offset: 0.5 },
+        { transform: `translate(-50%, -50%) translate(${dx}px, ${dy}px) scale(1.1)`, opacity: 1 },
+      ];
+      const anim = el.animate(frames, { duration: dur, delay: i * 60, easing: kind === 'poison' ? 'ease-in' : 'linear', fill: 'forwards' });
+      anim.onfinish = () => {
+        el.remove();
+        if (!done) {
+          done = true;
+          impact(kind === 'breath' || kind === 'dark' ? (kind === 'breath' ? 'fire' : 'dark') : kind, to);
+          onHit();
+        }
+      };
+    }
+  }
+
+  // 当たった場所の弾ける演出
+  function impact(kind, who) {
+    let c;
+    try { c = centerOf(who); } catch (e) { return; }
+    const el = spawn(`impact impact-${kind}`, c.x, c.y);
+    setTimeout(() => el.remove(), 500);
+  }
+
+  // 相手に向かって踏み込む
+  function lunge(who) {
+    const el = $(SPRITE[who]);
+    if (!supportsAnim()) return;
+    const d = who === 'player' ? 34 : -34;
+    el.animate([
+      { transform: 'translateX(0)' },
+      { transform: `translateX(${d}px)`, offset: 0.4 },
+      { transform: 'translateX(0)' },
+    ], { duration: 360, easing: 'ease-out' });
+  }
+
+  // 呪文を唱える時の光
+  function cast(who) {
+    const el = $(SPRITE[who]);
+    el.classList.remove('casting');
+    void el.offsetWidth;
+    el.classList.add('casting');
+    setTimeout(() => el.classList.remove('casting'), 400);
+  }
+
+  // 回復・防御などで体の周りに出る光
+  function aura(kind, who) {
+    let c;
+    try { c = centerOf(who); } catch (e) { return; }
+    const n = kind === 'level' ? 10 : 7;
+    for (let i = 0; i < n; i++) {
+      const el = spawn(`spark spark-${kind}`, c.x + rand(-c.w / 2.5, c.w / 2.5), c.y + rand(0, c.h / 2.5));
+      el.style.animationDelay = (i * 0.06) + 's';
+      setTimeout(() => el.remove(), 1100);
+    }
+    if (kind === 'buff' || kind === 'guard') {
+      const ring = spawn(`impact impact-${kind}`, c.x, c.y);
+      setTimeout(() => ring.remove(), 600);
+    }
+  }
+
+  return { projectile, impact, lunge, cast, aura };
+})();
+
 // =============================
 // カーソル（キーボード選択）
 // =============================
@@ -759,6 +862,41 @@ function handleCursorEscape() {
 // =============================
 let battleState = null;
 
+// HP・MPの青いバー。減った分はしばらく赤く残ってから縮む
+function setBar(id, cur, max) {
+  const bar = $(id);
+  if (!bar) return;
+  const fill = bar.querySelector('.bar-fill');
+  const lag = bar.querySelector('.bar-lag');
+  const r = clamp(max ? cur / max : 0, 0, 1) * 100;
+  const prev = fill.dataset.r === undefined ? r : parseFloat(fill.dataset.r);
+  fill.dataset.r = r;
+  fill.style.width = r + '%';
+  if (r < prev) {
+    lag.style.transition = 'none';
+    lag.style.width = prev + '%';
+    void lag.offsetWidth;
+    lag.style.transition = 'width 0.5s ease 0.45s';
+    lag.style.width = r + '%';
+  } else {
+    lag.style.transition = 'none';
+    lag.style.width = r + '%';
+  }
+  bar.classList.toggle('low', r <= 25);
+  const num = $(id + '-num');
+  if (num) num.textContent = `${Math.max(0, cur)}/${max}`;
+}
+function resetBar(id) {
+  const bar = $(id);
+  if (!bar) return;
+  delete bar.querySelector('.bar-fill').dataset.r;
+}
+
+function heroHTML(px) {
+  const p = game.player;
+  return Art.heroInline(p.job, p.weapon, p.armor, px);
+}
+
 function startBattle(kind) {
   let tmpl;
   if (kind === 'boss') tmpl = ENEMIES.boss;
@@ -781,35 +919,48 @@ function startBattle(kind) {
   ov.classList.remove('hidden');
   ov.dataset.floor = game.currentMap;
   $('battle-window').classList.toggle('boss', battleState.boss);
-  $('battle-header').textContent = kind === 'boss' ? `[ ${enemy.name} ]` : `[ ${enemy.name} が あらわれた！ ]`;
+  $('battle-header').textContent = kind === 'boss' ? `[ ${enemy.name} ]` : `${enemy.name}が あらわれた！`;
+  $('battle-hero').innerHTML = heroHTML(96);
+  $('battle-hero-name').textContent = game.player.name;
   const sprite = $('battle-enemy-sprite');
   sprite.innerHTML = Art.enemySVG(enemy.type, battleState.boss ? 128 : 96);
   sprite.classList.remove('dead');
+  sprite.classList.add('appear');
+  setTimeout(() => sprite.classList.remove('appear'), 500);
   $('battle-enemy-name').textContent = enemy.name;
+  ['be-hp', 'bh-hp', 'bh-mp'].forEach(resetBar);
   updateBattleEnemyHp();
   updateBattlePlayerBar();
-  $('battle-turn-msg').textContent = 'コマンド？';
   $('battle-log').replaceChildren();
   Sound.bgm(battleState.boss ? 'boss' : 'battle');
   if (kind === 'boss') addBattleLog('「愚かな人間め…。姫は渡さぬ！」', '#ff6666');
   if (kind === 'golem') addBattleLog('「ココ ヨリ サキ ニハ トオサヌ」', '#ff9966');
+  setBusy(false);
   showBattleMainCmd();
+}
+
+function setBusy(b) {
+  if (!battleState) return;
+  battleState.busy = b;
+  $('battle-commands').classList.toggle('busy', b);
+  $('battle-turn-msg').textContent = b ? '' : 'コマンド？';
 }
 
 function updateBattleEnemyHp() {
   const e = battleState.enemy;
-  const r = Math.max(0, e.hp / e.maxHp);
-  const fill = $('battle-hp-fill');
-  fill.style.width = `${r * 100}%`;
-  fill.style.background = hpColor(e.hp, e.maxHp);
-  $('battle-enemy-hp-num').textContent = `${Math.max(0, e.hp)}/${e.maxHp}`;
-  $('battle-status-msg').textContent = battleState.enemyPoisoned ? '[毒]' : '';
+  setBar('be-hp', e.hp, e.maxHp);
+  $('battle-status-msg').textContent = battleState.enemyPoisoned ? '毒' : '';
 }
 
 function updateBattlePlayerBar() {
   const p = game.player;
-  const el = $('battle-player-bar');
-  el.innerHTML = `<span>${esc(p.name)}</span><span style="color:${hpColor(p.hp, p.maxHp)}">HP ${p.hp}/${p.maxHp}</span><span style="color:#8af">MP ${p.mp}/${getMaxMp(p)}</span>${p.poisoned ? '<span style="color:#f6f">毒</span>' : ''}${battleState && battleState.protectActive ? '<span style="color:#0af">守</span>' : ''}`;
+  setBar('bh-hp', p.hp, p.maxHp);
+  setBar('bh-mp', p.mp, getMaxMp(p));
+  const tags = [];
+  if (p.poisoned) tags.push('<span style="color:#f6f">毒</span>');
+  if (battleState && battleState.protectActive) tags.push('<span style="color:#0af">守</span>');
+  if (battleState && battleState.playerDefending) tags.push('<span style="color:#aaa">防御</span>');
+  $('battle-hero-status').innerHTML = tags.join(' ');
 }
 
 function showBattleMainCmd() {
@@ -831,8 +982,10 @@ function addBattleLog(text, color) {
   log.scrollTop = log.scrollHeight;
 }
 
+function canAct() { return battleState && !battleState.ended && !battleState.busy; }
+
 function onBattleCommand(cmd) {
-  if (!battleState || battleState.ended || battleState.busy) return;
+  if (!canAct()) return;
   Sound.sfx('select');
   if (cmd === 'attack') playerAttack();
   else if (cmd === 'magic') openMagicSubMenu();
@@ -845,26 +998,33 @@ function physDamage(atk, def) {
   return Math.max(1, Math.round((atk - def / 2) * (0.85 + Math.random() * 0.3)));
 }
 
+// 敵にダメージ。倒したら true
 function damageEnemy(dmg, color, sfx) {
   const e = battleState.enemy;
   e.hp -= dmg;
   Sound.sfx(sfx || 'hit');
   shake('battle-enemy-sprite');
-  popNumber(dmg, color || 'pop-enemy', 'battle-enemy-area');
+  popNumber(dmg, color || 'pop-enemy', 'fighter-enemy');
   updateBattleEnemyHp();
-  if (e.hp <= 0) { e.hp = 0; endBattleWin(); return true; }
+  if (e.hp <= 0) { e.hp = 0; updateBattleEnemyHp(); endBattleWin(); return true; }
   return false;
 }
 
 function playerAttack() {
+  setBusy(true);
   const p = game.player;
   const e = battleState.enemy;
-  const crit = Math.random() < 1 / 16;
-  let dmg = physDamage(getAtk(p), e.def);
-  if (crit) dmg = Math.round(dmg * 1.8);
-  addBattleLog(crit ? `会心の一撃！ ${e.name}に ${dmg}ダメージ！` : `${p.name}の攻撃！ ${e.name}に ${dmg}ダメージ！`, crit ? '#ffd700' : '#fff');
-  if (damageEnemy(dmg, crit ? 'pop-crit' : 'pop-enemy', crit ? 'crit' : 'hit')) return;
-  enemyTurnLater();
+  Fx.lunge('player');
+  setTimeout(() => {
+    const crit = Math.random() < 1 / 16;
+    let dmg = physDamage(getAtk(p), e.def);
+    if (crit) dmg = Math.round(dmg * 1.8);
+    Fx.impact(crit ? 'crit' : 'slash', 'enemy');
+    if (crit) flashScreen('gold');
+    addBattleLog(crit ? `会心の一撃！ ${e.name}に ${dmg}ダメージ！` : `${p.name}の攻撃！ ${e.name}に ${dmg}ダメージ！`, crit ? '#ffd700' : '#fff');
+    if (damageEnemy(dmg, crit ? 'pop-crit' : 'pop-enemy', crit ? 'crit' : 'hit')) return;
+    enemyTurnLater();
+  }, 200);
 }
 
 function openMagicSubMenu() {
@@ -918,55 +1078,72 @@ function spellPower(sid, p) {
 }
 
 function useMagic(sid) {
+  if (!canAct()) return;
   const p = game.player;
   const e = battleState.enemy;
   const sp = SPELLS[sid];
   if (p.mp < sp.mp) return;
   p.mp -= sp.mp;
   showBattleMainCmd();
+  setBusy(true);
   updateBattlePlayerBar();
+  addBattleLog(`${p.name}は${sp.name}を唱えた！`, '#aaf');
+  Fx.cast('player');
 
   switch (sp.type) {
-    case 'attack': {
-      let dmg = spellPower(sid, p);
-      if (sid === 'blizzard') dmg = Math.max(1, dmg - Math.floor(e.def / 2));
-      if (sid === 'holy' && e.undead) dmg *= 2;
-      if (battleState.boss) dmg = Math.round(dmg * 0.65); // 門番と竜は魔法に強い
-      flashScreen(sp.fx);
-      addBattleLog(`${sp.name}！ ${e.name}に ${dmg}ダメージ！`, '#aaf');
-      if (damageEnemy(dmg, 'pop-magic', sp.fx)) return;
-      break;
-    }
+    case 'attack':
+      // 主人公の手元から敵へ飛ばし、当たった瞬間にダメージ
+      setTimeout(() => {
+        Sound.sfx(sp.fx === 'thunder' ? 'thunder' : sp.fx === 'ice' ? 'ice' : sp.fx === 'holy' ? 'holy' : 'fire');
+        Fx.projectile(sp.fx, 'player', 'enemy', () => {
+          let dmg = spellPower(sid, p);
+          if (sid === 'blizzard') dmg = Math.max(1, dmg - Math.floor(e.def / 2));
+          if (sid === 'holy' && e.undead) dmg *= 2;
+          if (battleState.boss) dmg = Math.round(dmg * 0.65); // 門番と竜は魔法に強い
+          flashScreen(sp.fx);
+          addBattleLog(`${e.name}に ${dmg}ダメージ！`, '#aaf');
+          if (damageEnemy(dmg, 'pop-magic', 'hit')) return;
+          enemyTurnLater();
+        });
+      }, 180);
+      return;
     case 'heal': {
       const amt = Math.min(p.maxHp - p.hp, spellPower(sid, p));
       p.hp += amt;
       Sound.sfx('heal');
-      flashScreen('heal');
-      popNumber('+' + amt, 'pop-heal', 'battle-player-bar');
-      addBattleLog(`${sp.name}！ HPが${amt}回復した！`, '#0f0');
+      Fx.aura('heal', 'player');
+      popNumber('+' + amt, 'pop-heal', 'fighter-player');
+      addBattleLog(`HPが${amt}回復した！`, '#0f0');
       break;
     }
     case 'buff':
       battleState.protectActive = true;
       Sound.sfx('buff');
-      addBattleLog(`${sp.name}！ 光の盾が身を包んだ！`, '#0af');
+      Fx.aura('buff', 'player');
+      addBattleLog('光の盾が身を包んだ！', '#0af');
       break;
     case 'debuff':
-      Sound.sfx('poison');
-      if (!battleState.enemyPoisoned && e.type !== 'golem') {
-        battleState.enemyPoisoned = true;
-        addBattleLog(`${sp.name}！ ${e.name}は毒に侵された！`, '#a0f');
-      } else addBattleLog(`${sp.name}！ しかし効かなかった…`, '#888');
-      updateBattleEnemyHp();
-      break;
+      setTimeout(() => {
+        Sound.sfx('poison');
+        Fx.projectile('poison', 'player', 'enemy', () => {
+          if (!battleState.enemyPoisoned && e.type !== 'golem') {
+            battleState.enemyPoisoned = true;
+            addBattleLog(`${e.name}は毒に侵された！`, '#a0f');
+          } else addBattleLog('しかし効かなかった…', '#888');
+          updateBattleEnemyHp();
+          enemyTurnLater();
+        });
+      }, 180);
+      return;
     case 'escape':
       if (!battleState.boss) {
         Sound.sfx('run');
-        addBattleLog('スモーク！ 煙に紛れて逃げ出した！', '#aaa');
+        Fx.aura('smoke', 'player');
+        addBattleLog('煙に紛れて逃げ出した！', '#aaa');
         endBattleEscape();
         return;
       }
-      addBattleLog('スモーク！ しかし逃げられない！', '#f66');
+      addBattleLog('しかし逃げられない！', '#f66');
       break;
   }
   updateBattlePlayerBar();
@@ -982,42 +1159,49 @@ function applyItemEffect(id, inBattle) {
       const amt = Math.min(p.maxHp - p.hp, c.power);
       p.hp += amt;
       Sound.sfx('heal');
-      if (inBattle) popNumber('+' + amt, 'pop-heal', 'battle-player-bar');
+      if (inBattle) { popNumber('+' + amt, 'pop-heal', 'fighter-player'); Fx.aura('heal', 'player'); }
       return `${c.name}を使った。HPが${amt}回復した！`;
     }
     case 'mp': {
       const amt = Math.min(getMaxMp(p) - p.mp, c.power);
       p.mp += amt;
       Sound.sfx('heal');
+      if (inBattle) Fx.aura('mp', 'player');
       return `${c.name}を使った。MPが${amt}回復した！`;
     }
     case 'antidote':
       p.poisoned = false;
       Sound.sfx('heal');
+      if (inBattle) Fx.aura('heal', 'player');
       return `${c.name}を使った。毒が消えた！`;
     default: return '';
   }
 }
 
 function useItemInBattle(id) {
+  if (!canAct()) return;
   const p = game.player;
   const e = battleState.enemy;
   const c = CONSUMABLES[id];
   showBattleMainCmd();
+  setBusy(true);
   consumeItem(p, id);
   if (c.effect === 'holy') {
-    if (e.undead) {
-      const dmg = rand(80, 110);
-      flashScreen('holy');
-      addBattleLog(`聖水を浴びせた！ ${e.name}に ${dmg}の大ダメージ！`, '#ffd');
-      if (damageEnemy(dmg, 'pop-magic', 'holy')) return;
-    } else addBattleLog('聖水を浴びせた！ しかし効果がない…', '#888');
-  } else {
-    addBattleLog(applyItemEffect(id, true), '#0f0');
+    addBattleLog('聖水を投げつけた！', '#ffd');
+    Fx.projectile('holy', 'player', 'enemy', () => {
+      if (e.undead) {
+        const dmg = rand(80, 110);
+        flashScreen('holy');
+        addBattleLog(`${e.name}に ${dmg}の大ダメージ！`, '#ffd');
+        if (damageEnemy(dmg, 'pop-magic', 'holy')) return;
+      } else addBattleLog('しかし効果がない…', '#888');
+      enemyTurnLater();
+    });
+    return;
   }
+  addBattleLog(applyItemEffect(id, true), '#0f0');
   updateBattlePlayerBar();
   updateStatusPanel();
-  showBattleMainCmd();
   enemyTurnLater();
 }
 
@@ -1038,18 +1222,23 @@ function addItem(p, id, count = 1) {
 }
 
 function playerDefend() {
+  setBusy(true);
   battleState.playerDefending = true;
+  Fx.aura('guard', 'player');
   addBattleLog(`${game.player.name}は身を守っている。`, '#aaa');
+  updateBattlePlayerBar();
   enemyTurnLater();
 }
 
 function playerRun() {
   if (battleState.boss) { addBattleLog('逃げられない！', '#f66'); return; }
+  setBusy(true);
   const p = game.player;
   let rate = p.job === 'thief' ? CONFIG.ESCAPE_RATE_THIEF : CONFIG.ESCAPE_RATE_NORMAL;
   rate = clamp(rate + ARMORS[p.armor].escapeBonus + WEAPONS[p.weapon].escapeBonus, 0, 1);
   if (Math.random() < rate) {
     Sound.sfx('run');
+    $('battle-hero').classList.add('flee');
     addBattleLog('うまく逃げ出した！', '#aaa');
     endBattleEscape();
   } else {
@@ -1059,8 +1248,9 @@ function playerRun() {
 }
 
 function enemyTurnLater() {
-  battleState.busy = true;
-  setTimeout(() => { if (battleState && !battleState.ended) enemyTurn(); }, 450);
+  if (!battleState) return;
+  setBusy(true);
+  setTimeout(() => { if (battleState && !battleState.ended) enemyTurn(); }, 550);
 }
 
 function enemyTurn() {
@@ -1073,57 +1263,69 @@ function enemyTurn() {
     const pd = Math.max(1, Math.floor(e.maxHp * 0.06));
     addBattleLog(`${e.name}は毒で ${pd}ダメージを受けた！`, '#a0f');
     e.hp -= pd;
-    popNumber(pd, 'pop-poison', 'battle-enemy-area');
+    Fx.impact('poison', 'enemy');
+    popNumber(pd, 'pop-poison', 'fighter-enemy');
     updateBattleEnemyHp();
     if (e.hp <= 0) { e.hp = 0; endBattleWin(); return; }
   }
 
-  let dmg;
-  if (e.special === 'breath' && bs.turn % 3 === 0) {
-    dmg = rand(50, 72);
-    flashScreen('fire');
-    Sound.sfx('fire');
-    addBattleLog(`ヴォルガンは灼熱の炎を吐いた！`, '#ff4400');
-  } else if (e.special === 'spell' && Math.random() < 0.35) {
-    dmg = Math.round(e.atk * (0.7 + Math.random() * 0.3));
-    flashScreen('thunder');
-    Sound.sfx('thunder');
-    addBattleLog(`${e.name}は呪文を唱えた！`, '#f8f');
-  } else if (e.type === 'golem' && bs.turn % 4 === 0) {
-    dmg = Math.round(physDamage(e.atk, getDef(p)) * 1.8);
-    addBattleLog('ゴーレムは大きく腕を振り下ろした！', '#f96');
-  } else {
-    dmg = physDamage(e.atk, getDef(p));
-    addBattleLog(`${e.name}の攻撃！`, '#f88');
-  }
-  if (bs.playerDefending) dmg = Math.floor(dmg * 0.5);
-  if (bs.protectActive) { dmg = Math.floor(dmg * 0.5); bs.protectActive = false; }
-  dmg = Math.max(1, dmg);
-  p.hp -= dmg;
-  addBattleLog(`${p.name}は ${dmg}のダメージを受けた！`, '#f88');
-  Sound.sfx('hurt');
-  shake('battle-window');
-  flashScreen('damage');
-  popNumber(dmg, 'pop-player', 'battle-player-bar');
+  // 攻撃の種類を決める
+  let mode = 'melee', mult = 1;
+  if (e.special === 'breath' && bs.turn % 3 === 0) mode = 'breath';
+  else if (e.special === 'spell' && Math.random() < 0.35) mode = 'spell';
+  else if (e.type === 'golem' && bs.turn % 4 === 0) { mode = 'melee'; mult = 1.8; }
 
-  if (e.special === 'poison' && !p.poisoned && Math.random() < 0.3) {
-    p.poisoned = true;
-    addBattleLog(`${p.name}は毒を受けた！`, '#a0f');
-  }
-  bs.playerDefending = false;
+  const hit = () => {
+    if (!battleState || battleState.ended) return;
+    let dmg;
+    if (mode === 'breath') dmg = rand(50, 72);
+    else if (mode === 'spell') dmg = Math.round(e.atk * (0.7 + Math.random() * 0.3));
+    else dmg = Math.round(physDamage(e.atk, getDef(p)) * mult);
+    if (bs.playerDefending) dmg = Math.floor(dmg * 0.5);
+    if (bs.protectActive) { dmg = Math.floor(dmg * 0.5); bs.protectActive = false; }
+    dmg = Math.max(1, dmg);
+    p.hp -= dmg;
+    addBattleLog(`${p.name}は ${dmg}のダメージを受けた！`, '#f88');
+    Sound.sfx('hurt');
+    shake('battle-hero');
+    flashScreen('damage');
+    popNumber(dmg, 'pop-player', 'fighter-player');
 
-  if (p.hp <= 0) {
-    p.hp = 0;
+    if (e.special === 'poison' && !p.poisoned && Math.random() < 0.3) {
+      p.poisoned = true;
+      addBattleLog(`${p.name}は毒を受けた！`, '#a0f');
+    }
+    bs.playerDefending = false;
+
+    if (p.hp <= 0) {
+      p.hp = 0;
+      updateBattlePlayerBar();
+      updateStatusPanel();
+      endBattleLose();
+      return;
+    }
     updateBattlePlayerBar();
     updateStatusPanel();
-    endBattleLose();
-    return;
+    setTimeout(() => {
+      if (!battleState || battleState.ended) return;
+      setBusy(false);
+      showBattleMainCmd();
+    }, 250);
+  };
+
+  if (mode === 'breath') {
+    addBattleLog('ヴォルガンは灼熱の炎を吐いた！', '#ff4400');
+    Sound.sfx('fire');
+    Fx.projectile('breath', 'enemy', 'player', hit);
+  } else if (mode === 'spell') {
+    addBattleLog(`${e.name}は呪文を唱えた！`, '#f8f');
+    Fx.cast('enemy');
+    setTimeout(() => { Sound.sfx('thunder'); Fx.projectile('dark', 'enemy', 'player', hit); }, 180);
+  } else {
+    addBattleLog(mult > 1 ? 'ゴーレムは大きく腕を振り下ろした！' : `${e.name}の攻撃！`, mult > 1 ? '#f96' : '#f88');
+    Fx.lunge('enemy');
+    setTimeout(() => { Fx.impact(mult > 1 ? 'crit' : 'claw', 'player'); hit(); }, 200);
   }
-  bs.busy = false;
-  updateBattlePlayerBar();
-  updateStatusPanel();
-  $('battle-turn-msg').textContent = 'コマンド？';
-  showBattleMainCmd();
 }
 
 function endBattleWin() {
@@ -1136,7 +1338,7 @@ function endBattleWin() {
   p.exp += e.exp;
   p.gold += e.gold;
   game.stats.kills++;
-  $('battle-enemy-sprite').classList.add('dead');
+  setTimeout(() => $('battle-enemy-sprite').classList.add('dead'), 150);
   Sound.bgm(null);
   Sound.sfx('win');
   addBattleLog(`${e.name}を倒した！`, '#ffd700');
@@ -1148,6 +1350,7 @@ function endBattleWin() {
     setCell(TILE.FLOOR);
   }
   const leveled = checkLevelUp();
+  if (leveled) { updateBattlePlayerBar(); Fx.aura('level', 'player'); }
   updateStatusPanel();
 
   setTimeout(() => {
@@ -1164,7 +1367,7 @@ function endBattleWin() {
       addMessage(`${e.name}を倒した！ EXP+${e.exp} ${e.gold}P`, '#ffd700');
     }
     if (leveled) addMessage(`レベルが ${p.lv} に上がった！`, '#ffd700');
-  }, leveled ? 1900 : 1300);
+  }, leveled ? 2000 : 1400);
 }
 
 function endBattleEscape() {
@@ -1172,6 +1375,7 @@ function endBattleEscape() {
   cursor.context = null;
   setTimeout(() => {
     $('battle-overlay').classList.add('hidden');
+    $('battle-hero').classList.remove('flee');
     battleState = null;
     game.inputEnabled = true;
     playMapBgm();
@@ -1184,13 +1388,15 @@ function endBattleLose() {
   battleState.ended = true;
   cursor.context = null;
   addBattleLog(`${game.player.name}は力尽きた…`, '#ff3333');
+  $('battle-hero').classList.add('dead');
   document.querySelectorAll('#battle-main-cmd .battle-btn').forEach(b => { b.disabled = true; });
   Sound.bgm(null);
   setTimeout(() => {
     $('battle-overlay').classList.add('hidden');
+    $('battle-hero').classList.remove('dead');
     battleState = null;
     triggerGameOver();
-  }, 1600);
+  }, 1700);
 }
 
 function checkLevelUp() {
