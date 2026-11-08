@@ -83,7 +83,7 @@ const DEFAULT_PROFILES = {
     personality: '気品があり芯が強い王女。一人称は「わたくし」。助けてくれた一行に深く感謝している。',
     memories: ['嵐の夜、暗黒竜に城からさらわれた', '洞窟の牢で、助けが来ることを信じて待ち続けた'] },
 };
-const MEMORY_MAX = 15;
+const MEMORY_MAX = 50;
 const GENDERS = ['男性', '女性', 'その他', '秘密'];
 
 // 記憶を書き足す（古いものから消える）
@@ -1934,7 +1934,7 @@ function openProfileEditor(id) {
         <label>年齢<input id="pf-age" type="number" min="0" max="999" value="${esc(pr.age)}"></label>
       </div>
       <label>${isHero ? '人柄・自己紹介' : '性格・口調'}<textarea id="pf-personality" maxlength="200" rows="3" placeholder="${isHero ? '例：無口だが情に厚い。元は羊飼い。' : '例：明るく元気。一人称は「ボク」。'}">${esc(pr.personality)}</textarea></label>
-      <label>記憶（1行に1つ。冒険の出来事や会話で自動的に増えます／最大${MEMORY_MAX}件）<textarea id="pf-memories" maxlength="1200" rows="6">${esc(pr.memories.join('\n'))}</textarea></label>
+      <label>記憶（1行に1つ。冒険の出来事や会話で自動的に増えます／最大${MEMORY_MAX}件）<textarea id="pf-memories" maxlength="3100" rows="8">${esc(pr.memories.join('\n'))}</textarea></label>
       <div class="shop-row-btns">
         <button class="shop-btn" id="pf-save">保存する</button>
         ${isHero ? '' : '<button class="shop-btn" id="pf-reset">初期設定に戻す</button>'}
